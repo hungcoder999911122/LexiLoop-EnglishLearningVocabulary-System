@@ -30,16 +30,12 @@ DROP VIEW IF EXISTS `vw_quiz_result_summary`;
 DROP VIEW IF EXISTS `vw_learning_attempt_status`;
 DROP VIEW IF EXISTS `vw_learning_items`;
 DROP VIEW IF EXISTS `vw_learning_sources`;
-DROP VIEW IF EXISTS `vw_daily_vocab_list`;
 DROP VIEW IF EXISTS `vw_user_progress`;
 DROP VIEW IF EXISTS `vw_srs_due_topics`;
 DROP FUNCTION IF EXISTS `fn_get_current_streak`;
-DROP FUNCTION IF EXISTS `fn_calculate_retention_rate`;
-DROP PROCEDURE IF EXISTS `sp_add_new_vocabulary`;
 DROP PROCEDURE IF EXISTS `sp_set_vocabulary_statuses`;
 DROP PROCEDURE IF EXISTS `sp_delete_personal_vocabularies`;
 DROP PROCEDURE IF EXISTS `sp_save_personal_vocabulary`;
-DROP PROCEDURE IF EXISTS `sp_record_study_session`;
 DROP PROCEDURE IF EXISTS `sp_save_flashcard_session`;
 DROP PROCEDURE IF EXISTS `sp_submit_quiz`;
 DROP PROCEDURE IF EXISTS `sp_manage_learning_attempt`;
@@ -175,31 +171,6 @@ LEFT JOIN `vocabulary_set_items` vsi ON vsi.`vocabulary_set_id` = vs.`id`
 GROUP BY vs.`id`, vs.`user_id`, vs.`name`, vs.`description`, vs.`created_at`, vs.`updated_at`,
          u.`full_name`, u.`email`$$
 CREATE VIEW `vw_system_settings` AS SELECT * FROM `system_settings`$$
-
--- PHP filters this view by user_id. The view does not expose another user's
--- data by itself; authorization is still enforced in PHP from the session.
-CREATE VIEW `vw_daily_vocab_list` AS
-SELECT
-    p.`user_id`,
-    p.`id` AS `progress_id`,
-    v.`id` AS `vocabulary_id`,
-    v.`word`,
-    v.`pronunciation`,
-    v.`part_of_speech`,
-    v.`meaning`,
-    v.`example_sentence`,
-    v.`audio_url`,
-    t.`topicID` AS `topic_id`,
-    t.`topicName` AS `topic_name`,
-    p.`status`,
-    p.`repetitions`,
-    p.`next_review_date`,
-    CASE WHEN p.`next_review_date` <= CURRENT_DATE THEN 1 ELSE 0 END AS `is_due`
-FROM `user_vocab_progress` p
-JOIN `vocabulary` v ON v.`id` = p.`vocabulary_id`
-JOIN `Topics` t ON t.`topicID` = v.`topic_id`
-WHERE p.`next_review_date` IS NOT NULL
-  AND p.`next_review_date` <= CURRENT_DATE$$
 
 -- A stable database-facing contract for topic and owned personal-set labels.
 CREATE VIEW `vw_learning_sources` AS
@@ -399,28 +370,6 @@ LEFT JOIN `Topics` t ON t.`topicID` = ls.`topic_id`
 LEFT JOIN `vocabulary_sets` vs ON vs.`id` = ls.`vocabulary_set_id`
 WHERE ls.`words_studied` > 0$$
 
--- Retention is the percentage of successful reviews (quality >= 3)
--- during the most recent 30 days. NULL means there is no review data yet.
-CREATE FUNCTION `fn_calculate_retention_rate`(p_user_id INT)
-RETURNS DECIMAL(5,2)
-READS SQL DATA
-BEGIN
-    DECLARE v_total INT DEFAULT 0;
-    DECLARE v_successful INT DEFAULT 0;
-
-    SELECT COUNT(*), COALESCE(SUM(rl.`quality_rating` >= 3), 0)
-      INTO v_total, v_successful
-      FROM `review_logs` rl
-      JOIN `user_vocab_progress` p ON p.`id` = rl.`progress_id`
-     WHERE p.`user_id` = p_user_id
-       AND rl.`review_date` >= CURRENT_DATE - INTERVAL 29 DAY;
-
-    IF v_total = 0 THEN
-        RETURN NULL;
-    END IF;
-    RETURN ROUND(v_successful * 100.0 / v_total, 2);
-END$$
-
 -- Đếm chuỗi ngày có ít nhất một từ duy nhất được luyện bằng Flashcard hoặc Quiz.
 -- Nếu hôm nay chưa học nhưng hôm qua có học, chuỗi vẫn được giữ đến hết hôm nay;
 -- chỉ khi bỏ trọn một ngày thì chuỗi mới trở về 0.
@@ -566,118 +515,6 @@ BEGIN
        SET `last_reviewed_at` = NOW(),
            `last_quality_rating` = NEW.`quality_rating`
      WHERE `id` = NEW.`progress_id`;
-END$$
-
--- Atomic unit of work for one flashcard answer. It follows strict two-phase
--- locking: locks are acquired before changes and released only at COMMIT.
-CREATE PROCEDURE `sp_record_study_session`(
-    IN p_user_id INT,
-    IN p_topic_id INT,
-    IN p_vocabulary_id INT,
-    IN p_quality_rating TINYINT,
-    IN p_response_time_ms INT,
-    IN p_session_type VARCHAR(20)
-)
-MODIFIES SQL DATA
-BEGIN
-    DECLARE v_user_id INT;
-    DECLARE v_progress_id INT DEFAULT NULL;
-    DECLARE v_old_repetitions INT DEFAULT 0;
-    DECLARE v_old_interval INT DEFAULT 0;
-    DECLARE v_old_ease DECIMAL(4,2) DEFAULT 2.50;
-    DECLARE v_repetitions INT;
-    DECLARE v_interval INT;
-    DECLARE v_ease DECIMAL(4,2);
-    DECLARE v_status VARCHAR(10);
-    DECLARE v_streak INT;
-
-    DECLARE EXIT HANDLER FOR SQLEXCEPTION
-    BEGIN
-        ROLLBACK;
-        RESIGNAL;
-    END;
-
-    IF p_quality_rating NOT BETWEEN 0 AND 5 THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'quality_rating must be between 0 and 5';
-    END IF;
-    IF p_response_time_ms IS NOT NULL AND p_response_time_ms < 0 THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'response_time_ms must not be negative';
-    END IF;
-    IF p_session_type NOT IN ('new_learning', 'review') THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'invalid session_type';
-    END IF;
-
-    START TRANSACTION;
-
-    -- Parent-row lock serializes concurrent answers of the same user. This also
-    -- safely handles the first progress-row creation before the unique key applies.
-    SELECT `userID` INTO v_user_id
-      FROM `Users`
-     WHERE `userID` = p_user_id AND `status` = 'active'
-     FOR UPDATE;
-    IF v_user_id IS NULL THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'active user not found';
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM `vocabulary` WHERE `id` = p_vocabulary_id) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'vocabulary not found';
-    END IF;
-    IF p_topic_id IS NOT NULL AND NOT EXISTS (
-        SELECT 1 FROM `vocabulary` WHERE `id` = p_vocabulary_id AND `topic_id` = p_topic_id
-    ) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'vocabulary does not belong to topic';
-    END IF;
-
-    SELECT `id`, `repetitions`, `interval_days`, `ease_factor`
-      INTO v_progress_id, v_old_repetitions, v_old_interval, v_old_ease
-      FROM `user_vocab_progress`
-     WHERE `user_id` = p_user_id AND `vocabulary_id` = p_vocabulary_id
-     FOR UPDATE;
-
-    IF v_progress_id IS NULL THEN
-        INSERT INTO `user_vocab_progress`
-            (`user_id`, `vocabulary_id`, `status`, `ease_factor`, `interval_days`, `repetitions`, `next_review_date`)
-        VALUES (p_user_id, p_vocabulary_id, 'new', 2.50, 0, 0, CURRENT_DATE);
-        SET v_progress_id = LAST_INSERT_ID();
-        SET v_old_repetitions = 0;
-        SET v_old_interval = 0;
-        SET v_old_ease = 2.50;
-    END IF;
-
-    -- Simplified SM-2 calculation; only the procedure owns these state changes.
-    SET v_ease = GREATEST(1.30, v_old_ease + (0.10 - (5 - p_quality_rating) * (0.08 + (5 - p_quality_rating) * 0.02)));
-    IF p_quality_rating < 3 THEN
-        SET v_repetitions = 0;
-        SET v_interval = 1;
-    ELSE
-        SET v_repetitions = v_old_repetitions + 1;
-        SET v_interval = CASE
-            WHEN v_repetitions = 1 THEN 1
-            WHEN v_repetitions = 2 THEN 3
-            ELSE GREATEST(1, ROUND(GREATEST(v_old_interval, 1) * v_ease))
-        END;
-    END IF;
-    SET v_status = CASE WHEN v_repetitions >= 5 THEN 'mastered' ELSE 'learning' END;
-
-    UPDATE `user_vocab_progress`
-       SET `status` = v_status,
-           `ease_factor` = v_ease,
-           `interval_days` = v_interval,
-           `repetitions` = v_repetitions,
-           `next_review_date` = DATE_ADD(CURRENT_DATE, INTERVAL v_interval DAY)
-     WHERE `id` = v_progress_id;
-
-    INSERT INTO `review_logs` (`progress_id`, `review_date`, `quality_rating`, `response_time_ms`)
-    VALUES (v_progress_id, CURRENT_DATE, p_quality_rating, p_response_time_ms);
-
-    SET v_streak = fn_get_current_streak(p_user_id);
-    INSERT INTO `learning_sessions`
-        (`user_id`, `topic_id`, `session_type`, `session_date`, `words_studied`, `duration_seconds`, `streak_count`, `started_at`, `finished_at`)
-    VALUES
-        (p_user_id, p_topic_id, p_session_type, CURRENT_DATE, 1,
-         COALESCE(CEILING(p_response_time_ms / 1000), 0), v_streak, NOW(), NOW());
-
-    COMMIT;
 END$$
 
 -- Saves an entire Flashcard screen as one atomic session. p_statuses_json is
@@ -1418,53 +1255,6 @@ BEGIN
     ON DUPLICATE KEY UPDATE `setting_value` = VALUES(`setting_value`);
 END$$
 
--- Admin-only vocabulary creation. The PHP layer must pass user ID from the
--- authenticated server-side session, never from a client-controlled request.
-CREATE PROCEDURE `sp_add_new_vocabulary`(
-    IN p_actor_user_id INT,
-    IN p_topic_id INT,
-    IN p_word VARCHAR(100),
-    IN p_pronunciation VARCHAR(100),
-    IN p_part_of_speech VARCHAR(30),
-    IN p_meaning TEXT,
-    IN p_example_sentence TEXT,
-    IN p_audio_url VARCHAR(255)
-)
-MODIFIES SQL DATA
-BEGIN
-    DECLARE v_role VARCHAR(10);
-    DECLARE EXIT HANDLER FOR SQLEXCEPTION
-    BEGIN
-        ROLLBACK;
-        RESIGNAL;
-    END;
-
-    IF CHAR_LENGTH(TRIM(p_word)) = 0 OR CHAR_LENGTH(TRIM(p_meaning)) = 0 THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'word and meaning are required';
-    END IF;
-
-    START TRANSACTION;
-    SELECT `role` INTO v_role FROM `Users` WHERE `userID` = p_actor_user_id AND `status` = 'active' FOR UPDATE;
-    IF v_role IS NULL OR v_role <> 'admin' THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'only an active admin may add vocabulary';
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM `Topics` WHERE `topicID` = p_topic_id) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'topic not found';
-    END IF;
-    IF EXISTS (SELECT 1 FROM `vocabulary` WHERE `topic_id` = p_topic_id AND `word` = TRIM(p_word)) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'word already exists in this topic';
-    END IF;
-
-    INSERT INTO `vocabulary`
-        (`topic_id`, `word`, `pronunciation`, `part_of_speech`, `meaning`, `example_sentence`, `created_by`, `audio_url`)
-    VALUES
-        (p_topic_id, TRIM(p_word), NULLIF(TRIM(p_pronunciation), ''), NULLIF(TRIM(p_part_of_speech), ''),
-         TRIM(p_meaning), NULLIF(TRIM(p_example_sentence), ''), p_actor_user_id, NULLIF(TRIM(p_audio_url), ''));
-    COMMIT;
-END$$
-
-
-
 -- Helper chạy bên trong transaction của procedure gọi nó.
 -- Khóa hai dòng Users theo userID tăng dần để tránh vòng chờ A->B, B->A.
 -- Sau khi có khóa, đọc lại quyền hiện tại; không tin role lưu trong session PHP.
@@ -1591,7 +1381,6 @@ DELIMITER ;
 -- Recommended least-privilege pattern (replace app_user with the actual account):
 -- REVOKE INSERT, UPDATE, DELETE ON `db_LexiLoop`.* FROM 'app_user'@'%';
 -- GRANT SELECT ON `db_LexiLoop`.`vw_user_progress` TO 'app_user'@'%';
--- GRANT SELECT ON `db_LexiLoop`.`vw_daily_vocab_list` TO 'app_user'@'%';
 -- GRANT SELECT ON `db_LexiLoop`.`vw_learning_sources` TO 'app_user'@'%';
 -- GRANT SELECT ON `db_LexiLoop`.`vw_learning_items` TO 'app_user'@'%';
 -- GRANT SELECT ON `db_LexiLoop`.`vw_learning_attempt_status` TO 'app_user'@'%';
@@ -1602,7 +1391,6 @@ DELIMITER ;
 -- GRANT SELECT ON `db_LexiLoop`.`vw_user_daily_unique_words` TO 'app_user'@'%';
 -- GRANT SELECT ON `db_LexiLoop`.`vw_user_daily_learning_summary` TO 'app_user'@'%';
 -- GRANT SELECT ON `db_LexiLoop`.`vw_system_recent_activity` TO 'app_user'@'%';
--- GRANT EXECUTE ON PROCEDURE `db_LexiLoop`.`sp_record_study_session` TO 'app_user'@'%';
 -- GRANT EXECUTE ON PROCEDURE `db_LexiLoop`.`sp_save_flashcard_session` TO 'app_user'@'%';
 -- GRANT EXECUTE ON PROCEDURE `db_LexiLoop`.`sp_submit_quiz` TO 'app_user'@'%';
 -- GRANT EXECUTE ON PROCEDURE `db_LexiLoop`.`sp_manage_learning_attempt` TO 'app_user'@'%';
@@ -1611,7 +1399,6 @@ DELIMITER ;
 -- GRANT EXECUTE ON PROCEDURE `db_LexiLoop`.`sp_auth_get_account_by_id` TO 'app_user'@'%';
 -- GRANT EXECUTE ON PROCEDURE `db_LexiLoop`.`sp_auth_register_user` TO 'app_user'@'%';
 -- GRANT EXECUTE ON PROCEDURE `db_LexiLoop`.`sp_auth_update_account_settings` TO 'app_user'@'%';
--- GRANT EXECUTE ON PROCEDURE `db_LexiLoop`.`sp_add_new_vocabulary` TO 'app_user'@'%';
 -- GRANT EXECUTE ON PROCEDURE `db_LexiLoop`.`sp_save_personal_vocabulary` TO 'app_user'@'%';
 -- GRANT EXECUTE ON PROCEDURE `db_LexiLoop`.`sp_delete_personal_vocabularies` TO 'app_user'@'%';
 -- GRANT EXECUTE ON PROCEDURE `db_LexiLoop`.`sp_set_vocabulary_statuses` TO 'app_user'@'%';
@@ -1622,18 +1409,6 @@ DELIMITER ;
 -- ==============================================================================
 
 DELIMITER //
--- VIEW: Truy xuất dữ liệu cài đặt (Đã dùng ở D_Caidathethong.php)
-CREATE OR REPLACE VIEW vw_system_settings_logs AS
-SELECT 
-    log_id,
-    setting_key,
-    old_value,
-    new_value,
-    changed_by,
-    created_at
-FROM system_settings_logs
-ORDER BY created_at DESC//
-
 -- 3. TRIGGER: Tự động ghi log khi có thay đổi cấu hình (Audit Trail)
 -- Trigger này thỏa mãn tiêu chí thiết kế an toàn CSDL của môn học
 DROP TRIGGER IF EXISTS trg_audit_system_settings//
@@ -1654,24 +1429,7 @@ BEGIN
     END IF;
 END//
 
--- 4. FUNCTION: Hàm lấy nhanh một cấu hình hệ thống
--- Tránh việc phải viết SELECT ... FROM system_settings WHERE ... liên tục
-DROP FUNCTION IF EXISTS fn_get_setting_value//
-CREATE FUNCTION fn_get_setting_value(p_key VARCHAR(100))
-RETURNS TEXT
-READS SQL DATA
-BEGIN
-    DECLARE v_value TEXT;
-    SELECT setting_value INTO v_value 
-    FROM system_settings 
-    WHERE setting_key = p_key 
-    LIMIT 1;
-    
-    RETURN v_value;
-END//
-
 DELIMITER ;
-
 
 DROP PROCEDURE IF EXISTS `sp_submit_quiz`;
 DELIMITER $$
