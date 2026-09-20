@@ -11,7 +11,6 @@ SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
 SET time_zone = "+00:00";
 
-
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
 /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
@@ -28,13 +27,6 @@ USE `db_LexiLoop`;
 --
 -- Table structure for table `favorites`
 --
-
-CREATE TABLE `favorites` (
-  `id` int NOT NULL,
-  `user_id` int NOT NULL,
-  `vocabulary_id` int NOT NULL,
-  `created_at` datetime DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
 -- Dumping data for table `favorites`
@@ -98,14 +90,6 @@ CREATE TABLE `learning_attempts` (
 --
 -- Table structure for table `password_resets`
 --
-
-CREATE TABLE `password_resets` (
-  `id` int NOT NULL,
-  `email` varchar(100) NOT NULL,
-  `otp_code` varchar(6) NOT NULL,
-  `expires_at` datetime NOT NULL,
-  `created_at` datetime DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
 -- Dumping data for table `password_resets`
@@ -262,18 +246,6 @@ INSERT INTO `Topics` (`topicID`, `topicName`, `topicDescription`, `category`, `c
 -- Stand-in structure for view `tu_vung`
 -- (See below for the actual view)
 --
-CREATE TABLE `tu_vung` (
-`id` int
-,`topic_id` int
-,`word` varchar(100)
-,`pronunciation` varchar(100)
-,`part_of_speech` varchar(30)
-,`meaning` text
-,`example_sentence` text
-,`created_by` int
-,`created_at` datetime
-,`audio_url` varchar(255)
-);
 
 -- --------------------------------------------------------
 
@@ -316,16 +288,6 @@ INSERT INTO `Users` (`userID`, `email`, `password_hash`, `full_name`, `avatar_ur
 --
 -- Table structure for table `user_login_sessions`
 --
-
-CREATE TABLE `user_login_sessions` (
-  `id` int NOT NULL,
-  `user_id` int NOT NULL,
-  `session_token` varchar(255) NOT NULL,
-  `ip_address` varchar(45) DEFAULT NULL,
-  `user_agent` varchar(255) DEFAULT NULL,
-  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
-  `expires_at` datetime NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
 
@@ -585,14 +547,6 @@ INSERT INTO `vocabulary` (`id`, `topic_id`, `word`, `pronunciation`, `part_of_sp
 -- Table structure for table `vocabulary_images`
 --
 
-CREATE TABLE `vocabulary_images` (
-  `id` int NOT NULL,
-  `vocabulary_id` int NOT NULL,
-  `image_url` varchar(255) NOT NULL,
-  `uploaded_by` int DEFAULT NULL,
-  `uploaded_at` datetime DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
 --
 -- Dumping data for table `vocabulary_images`
 --
@@ -637,10 +591,6 @@ CREATE TABLE `vocabulary_set_items` (
 --
 -- Indexes for table `favorites`
 --
-ALTER TABLE `favorites`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `user_id` (`user_id`,`vocabulary_id`),
-  ADD KEY `vocabulary_id` (`vocabulary_id`);
 
 --
 -- Indexes for table `learning_sessions`
@@ -655,8 +605,6 @@ ALTER TABLE `learning_sessions`
 --
 -- Indexes for table `password_resets`
 --
-ALTER TABLE `password_resets`
-  ADD PRIMARY KEY (`id`);
 
 --
 -- Indexes for table `quiz_answer_details`
@@ -706,10 +654,6 @@ ALTER TABLE `Users`
 --
 -- Indexes for table `user_login_sessions`
 --
-ALTER TABLE `user_login_sessions`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `session_token` (`session_token`),
-  ADD KEY `user_id` (`user_id`);
 
 --
 -- Indexes for table `user_vocab_progress`
@@ -730,10 +674,6 @@ ALTER TABLE `vocabulary`
 --
 -- Indexes for table `vocabulary_images`
 --
-ALTER TABLE `vocabulary_images`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `vocabulary_id` (`vocabulary_id`),
-  ADD KEY `uploaded_by` (`uploaded_by`);
 
 --
 -- Indexes for table `vocabulary_sets`
@@ -758,8 +698,6 @@ ALTER TABLE `vocabulary_set_items`
 --
 -- AUTO_INCREMENT for table `favorites`
 --
-ALTER TABLE `favorites`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT for table `learning_sessions`
@@ -770,8 +708,6 @@ ALTER TABLE `learning_sessions`
 --
 -- AUTO_INCREMENT for table `password_resets`
 --
-ALTER TABLE `password_resets`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT for table `quiz_answer_details`
@@ -806,8 +742,6 @@ ALTER TABLE `Users`
 --
 -- AUTO_INCREMENT for table `user_login_sessions`
 --
-ALTER TABLE `user_login_sessions`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `user_vocab_progress`
@@ -824,8 +758,6 @@ ALTER TABLE `vocabulary`
 --
 -- AUTO_INCREMENT for table `vocabulary_images`
 --
-ALTER TABLE `vocabulary_images`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT for table `vocabulary_sets`
@@ -855,9 +787,6 @@ CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`%` SQL SECURITY DEFINER VIEW `tu_vung
 --
 -- Constraints for table `favorites`
 --
-ALTER TABLE `favorites`
-  ADD CONSTRAINT `favorites_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `Users` (`userID`) ON DELETE CASCADE,
-  ADD CONSTRAINT `favorites_ibfk_2` FOREIGN KEY (`vocabulary_id`) REFERENCES `vocabulary` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `learning_sessions`
@@ -897,8 +826,6 @@ ALTER TABLE `Topics`
 --
 -- Constraints for table `user_login_sessions`
 --
-ALTER TABLE `user_login_sessions`
-  ADD CONSTRAINT `user_login_sessions_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `Users` (`userID`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `user_vocab_progress`
@@ -917,9 +844,6 @@ ALTER TABLE `vocabulary`
 --
 -- Constraints for table `vocabulary_images`
 --
-ALTER TABLE `vocabulary_images`
-  ADD CONSTRAINT `vocabulary_images_ibfk_1` FOREIGN KEY (`vocabulary_id`) REFERENCES `vocabulary` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `vocabulary_images_ibfk_2` FOREIGN KEY (`uploaded_by`) REFERENCES `Users` (`userID`) ON DELETE SET NULL;
 
 --
 -- Constraints for table `vocabulary_sets`
