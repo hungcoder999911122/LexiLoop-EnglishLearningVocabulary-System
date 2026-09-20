@@ -92,17 +92,19 @@ unset($row);
                     <span class="C_Dashboard_user_statIcon" aria-hidden="true">↗</span>
                     <strong><?= $learningWords ?></strong>
                     <span>Đang học</span>
+                    <!-- <small>Đã bắt đầu, chưa đạt 5 lần ôn đúng</small> -->
                 </div>
                 <div class="C_Dashboard_user_statItem C_Dashboard_user_statItem--green">
                     <span class="C_Dashboard_user_statIcon" aria-hidden="true">✓</span>
                     <strong><?= $masteredWords ?></strong>
                     <span>Đã thuộc</span>
+                    <!-- <small>Đạt từ 5 lần ôn thành công</small> -->
                 </div>
                 <div class="C_Dashboard_user_statItem C_Dashboard_user_statItem--violet">
                     <span class="C_Dashboard_user_statIcon" aria-hidden="true">★</span>
                     <strong><?= $avgQuizScoreDisplay ?></strong>
                     <span>Điểm TB Quiz</span>
-                    <small><?= $totalQuizzes > 0 ? $totalQuizzes . ' bài đã làm' : 'Chưa làm bài nào' ?></small>
+                    <small><?= $totalQuizzes > 0 ? $totalQuizzes . ' bài đã làm' :  ' Chưa làm bài quiz nào' ?></small>
                 </div>
                 <div class="C_Dashboard_user_statItem C_Dashboard_user_statItem--orange">
                     <span class="C_Dashboard_user_statIcon" aria-hidden="true">◎</span>

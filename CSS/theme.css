@@ -213,6 +213,11 @@ html.dark-mode .C_Gocrenluyen_table td {
 html.dark-mode .C_Gocrenluyen_table .C_Gocrenluyen_word { color: #adf2c5; }
 html.dark-mode .C_Gocrenluyen_table td small { color: #adc3b8; }
 html.dark-mode .C_Gocrenluyen_table .C_Gocrenluyen_example { color: #b9cdc3 !important; }
+html.dark-mode .C_Gocrenluyen_statusLegend > span {
+    background: var(--color-surface-elevated);
+    border-color: var(--color-border);
+    color: var(--color-text-muted);
+}
 html.dark-mode .C_Gocrenluyen_posTag {
     background: #343456;
     color: #ded5ff;

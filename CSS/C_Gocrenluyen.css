@@ -89,6 +89,15 @@
   box-shadow: 0 0 0 3px rgba(52, 150, 97, .12);
 }
 
+.C_Gocrenluyen_filterGroup--source {
+  min-width: 0;
+}
+
+.C_Gocrenluyen_filterGroup select optgroup {
+  color: var(--practice-text);
+  font-weight: 800;
+}
+
 /* Ô cố định chủ đề đang được chọn */
 .C_Gocrenluyen_fixedTopic {
   display: flex;
@@ -496,6 +505,25 @@
 }
 .C_Gocrenluyen_wordToolbar button:hover { background: #215e3b; }
 .C_Gocrenluyen_wordResults { padding-bottom: 12px; color: #68786f; font-size: 13px; }
+.C_Gocrenluyen_statusLegend {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: -2px 0 18px;
+}
+.C_Gocrenluyen_statusLegend > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--practice-border);
+  border-radius: 11px;
+  background: #f8fbf9;
+  color: #5c6d63;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.C_Gocrenluyen_statusLegend .C_Gocrenluyen_status { flex: 0 0 auto; }
 .C_Gocrenluyen_table td.C_Gocrenluyen_wordEmpty { padding: 30px 16px; text-align: center; }
 .C_Gocrenluyen_word { color: #216a43; font-size: 15px; }
 
@@ -566,9 +594,18 @@
   background: #fff2dc;
 }
 
+.C_Gocrenluyen_status--new {
+  color: #52645a;
+  background: #eef3f0;
+}
+
 .C_Gocrenluyen_status--mastered {
   color: #22794b;
   background: #e8f6ed;
+}
+
+@media (max-width: 900px) {
+  .C_Gocrenluyen_statusLegend { grid-template-columns: 1fr; }
 }
 
 /* Phân trang danh sách từ */

@@ -314,12 +314,12 @@ document.addEventListener("DOMContentLoaded", () => {
         `;
 
         const progressPercent = cards.length > 0
-            ? (statistics.rememberedCount / cards.length) * 100
+            ? (statistics.assessedCount / cards.length) * 100
             : 0;
         progressFill.style.width = `${progressPercent}%`;
 
-        if (statistics.rememberedCount === cards.length) {
-            statsText.insertAdjacentText("beforeend", " • Hoàn thành 100%");
+        if (statistics.assessedCount === cards.length) {
+            statsText.insertAdjacentText("beforeend", " • Đã đánh giá 100%");
         }
     }
 
@@ -361,6 +361,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     csrf: sessionConfig.csrf,
                     source: sessionConfig.source,
                     sourceId: sessionConfig.sourceId,
+                    submissionToken: sessionConfig.submissionToken,
                     durationSeconds: getElapsedSeconds(),
                     isFinal,
                     statuses: cardStatuses
@@ -381,9 +382,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     async function completeFlashcardIfFinished() {
-        // Chỉ "Đã nhớ" mới tạo tiến độ. Còn một thẻ "Chưa nhớ" thì phiên
-        // vẫn phải giữ in_progress để người dùng quay lại học tiếp.
-        if (hasCompletedSession || getStatistics().rememberedCount !== cards.length) return;
+        // SRS cần cả đánh giá "Đã nhớ" lẫn "Chưa nhớ". Phiên hoàn tất khi
+        // mọi thẻ đã được đánh giá, không bắt người dùng phải nhớ 100%.
+        if (hasCompletedSession || getStatistics().assessedCount !== cards.length) return;
 
         hasCompletedSession = true;
         isCompleting = true;
@@ -475,12 +476,12 @@ document.addEventListener("DOMContentLoaded", () => {
             );
             if (!shouldEnd) return;
 
-            // Thoát sớm: lưu checkpoint và cập nhật tiến trình thẻ đã học
-            try {
-                await saveCheckpoint();
-                await saveProgress(false);
-            } catch (e) {
-                console.warn("Lỗi lưu tiến trình khi thoát:", e);
+            // Thoát sớm chỉ lưu checkpoint. Tiến độ SRS được ghi đúng một lần
+            // khi toàn bộ thẻ đã được đánh giá, tránh áp dụng lặp cùng đánh giá.
+            const checkpointSaved = await saveCheckpoint();
+            if (!checkpointSaved) {
+                alert("Không thể lưu phiên Flashcard. Vui lòng thử lại trước khi thoát.");
+                return;
             }
         }
 

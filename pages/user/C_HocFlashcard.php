@@ -8,6 +8,18 @@ if (empty($_SESSION['C_learning_csrf'])) {
     $_SESSION['C_learning_csrf'] = bin2hex(random_bytes(32));
 }
 
+if (!isset($_SESSION['C_flashcard_submissions']) || !is_array($_SESSION['C_flashcard_submissions'])) {
+    $_SESSION['C_flashcard_submissions'] = [];
+}
+foreach ($_SESSION['C_flashcard_submissions'] as $token => $submission) {
+    if ((int) ($submission['createdAt'] ?? 0) < time() - 7200) {
+        unset($_SESSION['C_flashcard_submissions'][$token]);
+    }
+}
+while (count($_SESSION['C_flashcard_submissions']) >= 20) {
+    array_shift($_SESSION['C_flashcard_submissions']);
+}
+
 $source = $_GET['source'] ?? 'topic';
 $mode = $_GET['mode'] ?? '';
 if ($mode === 'review') {
@@ -25,6 +37,13 @@ if ($source !== 'review' && $source_id <= 0) {
 }
 
 $mode = $source === 'review' ? 'review' : '';
+$flashcard_submission_token = bin2hex(random_bytes(32));
+$_SESSION['C_flashcard_submissions'][$flashcard_submission_token] = [
+    'status' => 'pending',
+    'source' => $source,
+    'sourceId' => $source_id,
+    'createdAt' => time(),
+];
 $id_chu_de = $source === 'topic' ? $source_id : 0;
 $ten_chu_de = $source === 'review' ? 'Từ vựng cần ôn tập' : 'Nguồn học';
 $danh_sach_tu = [];
@@ -117,7 +136,7 @@ if ($limit_option !== 'all') {
     <link rel="stylesheet" href="../../CSS/C_HocFlashcard.css">
 
     <link rel="stylesheet" href="../../CSS/responsive.css">
-    <!-- <link rel="stylesheet" href="../../CSS/topheader.css"> -->
+    <script src="../../JS/theme.js"></script>
 </head>
 
 <body class="C_HocFlashcard_body">
@@ -264,6 +283,7 @@ if ($limit_option !== 'all') {
                                                 'sourceId' => $source_id,
                                                 'limit' => $limit_option,
                                                 'csrf' => $_SESSION['C_learning_csrf'],
+                                                'submissionToken' => $flashcard_submission_token,
                                                 'topicName' => $ten_chu_de,
                                                 'mode' => $mode === 'review' ? 'review' : 'new_learning'
                                             ],

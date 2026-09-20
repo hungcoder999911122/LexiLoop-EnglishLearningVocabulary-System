@@ -33,6 +33,7 @@ $latestQuizTotal = null;
 $flashcardRemembered = 0;
 $flashcardStatsTotal = 0;
 $sourceError = '';
+$systemTopics = [];
 $personalSets = [];
 $topicWords = [];
 $topicWordsPerPage = 10;
@@ -40,7 +41,7 @@ $wordPage = max(1, filter_var($_GET['word_page'] ?? 1, FILTER_VALIDATE_INT) ?: 1
 $topicWordPages = 1;
 $wordSearch = is_string($_GET['word_search'] ?? '') ? trim($_GET['word_search'] ?? '') : '';
 $wordStatus = $_GET['word_status'] ?? 'all';
-if (!in_array($wordStatus, ['all', 'unmastered', 'mastered'], true)) {
+if (!in_array($wordStatus, ['all', 'new', 'learning', 'unmastered', 'mastered'], true)) {
     $wordStatus = 'all';
 }
 $filteredWordCount = 0;
@@ -51,16 +52,23 @@ $modeProgress = [
 
 try {
     if ($isLoggedIn) {
-        $setRows = dbSelectView(
+        $sourceRows = dbSelectView(
             $link,
-            'SELECT source_id AS id, source_name AS name
+            'SELECT source_type, source_id AS id, source_name AS name, word_count
              FROM vw_learning_sources
-             WHERE source_type = ? AND owner_user_id = ?
-             ORDER BY source_name',
-            'si',
-            ['set', $userId]
+             WHERE source_type = \'topic\'
+                OR (source_type = \'set\' AND owner_user_id = ?)
+             ORDER BY source_type, source_name',
+            'i',
+            [$userId]
         );
-        $personalSets = $setRows;
+        foreach ($sourceRows as $availableSource) {
+            if ($availableSource['source_type'] === 'topic') {
+                $systemTopics[] = $availableSource;
+            } else {
+                $personalSets[] = $availableSource;
+            }
+        }
     }
 
     $sourceItems = [];
@@ -111,15 +119,13 @@ try {
             }
             unset($item);
 
-            if ($source === 'topic') {
-                // Lọc toàn bộ danh sách trước khi phân trang; không thay đổi thống kê học của chủ đề.
-                $filteredWords = array_values(array_filter($sourceItems, function ($item) use ($wordSearch, $wordStatus) {
-                    $isMastered = $item['learning_status'] === 'mastered';
-                    if (($wordStatus === 'mastered' && !$isMastered)
-                        || ($wordStatus === 'unmastered' && $isMastered)) {
+            // Cùng một bảng và bộ lọc cho cả chủ đề hệ thống lẫn bộ từ cá nhân.
+            $filteredWords = array_values(array_filter($sourceItems, function ($item) use ($wordSearch, $wordStatus) {
+                    $currentStatus = $item['learning_status'];
+                    if (($wordStatus === 'unmastered' && $currentStatus === 'mastered')
+                        || (in_array($wordStatus, ['new', 'learning', 'mastered'], true) && $currentStatus !== $wordStatus)) {
                         return false;
                     }
-                    // Chưa thuộc bao gồm cả từ mới và từ đang học.
                     if ($wordSearch === '') {
                         return true;
                     }
@@ -128,15 +134,10 @@ try {
                         ? mb_stripos($searchText, $wordSearch, 0, 'UTF-8') !== false
                         : stripos($searchText, $wordSearch) !== false;
                 }));
-                $filteredWordCount = count($filteredWords);
-                $topicWordPages = max(1, (int) ceil($filteredWordCount / $topicWordsPerPage));
-                $wordPage = min($wordPage, $topicWordPages);
-                $topicWords = array_slice(
-                    $filteredWords,
-                    ($wordPage - 1) * $topicWordsPerPage,
-                    $topicWordsPerPage
-                );
-            }
+            $filteredWordCount = count($filteredWords);
+            $topicWordPages = max(1, (int) ceil($filteredWordCount / $topicWordsPerPage));
+            $wordPage = min($wordPage, $topicWordPages);
+            $topicWords = array_slice($filteredWords, ($wordPage - 1) * $topicWordsPerPage, $topicWordsPerPage);
         }
     }
 
@@ -177,11 +178,10 @@ try {
             $state = is_array($state) ? $state : [];
             if ($activity === 'flashcard') {
                 $total = count($state['cardIds'] ?? []);
-                $completed = count(array_filter(
-                    $state['cardStatuses'] ?? [],
-                    static fn($status): bool => $status === 'da_nho'
+                $completed = count($state['cardStatuses'] ?? []);
+                $flashcardRemembered = count(array_filter(
+                    $state['cardStatuses'] ?? [], static fn($status): bool => $status === 'da_nho'
                 ));
-                $flashcardRemembered = $completed;
                 $flashcardStatsTotal = $total;
             } else {
                 $total = count($state['questions'] ?? []);
@@ -196,7 +196,10 @@ try {
                 }
             }
             $percent = $total > 0 ? min(100, (int) round($completed * 100 / $total)) : 0;
-            $modeProgress[$activity] = ['percent' => $percent, 'label' => 'Cần tiếp tục'];
+            $modeProgress[$activity] = [
+                'percent' => $percent,
+                'label' => $attempt['status'] === 'completed' ? 'Đã hoàn thành' : 'Cần tiếp tục',
+            ];
         }
     }
 } catch (Throwable $error) {
@@ -208,7 +211,6 @@ $hasSelectedSource = $isValidSource && $sourceError === '';
 $selectedCollection = $hasSelectedSource ? $source . ':' . $sourceId : '';
 $selectedLimit = $limitOption === 'all' ? $wordCount : min((int) $limitOption, $wordCount);
 $canStartLearning = $hasSelectedSource && $wordCount > 0;
-$isTopicContext = $hasSelectedSource && $source === 'topic';
 $sourceQuery = http_build_query(['source' => $source, 'id' => $sourceId, 'limit' => $limitOption]);
 
 if ($modeProgress['quiz']['label'] === 'Chưa bắt đầu' && $latestQuizTotal > 0) {
@@ -255,29 +257,28 @@ if ($flashcardStatsTotal === 0) {
             ?>
         <?php endif; ?>
         <form method="get" class="C_Gocrenluyen_filters" id="C_Gocrenluyen_filters">
-            <?php if ($isTopicContext): ?>
-                <!-- Topic đến từ nút Học của hệ thống: không cho đổi sang nguồn khác tại đây. -->
-                <input type="hidden" name="source" value="topic">
-                <input type="hidden" name="id" value="<?= $sourceId ?>">
-                <div class="C_Gocrenluyen_fixedTopic">
-                    <span>Chủ đề hệ thống</span>
-                    <strong><?= htmlspecialchars($sourceName) ?></strong>
-                </div>
-            <?php else: ?>
-                <!-- Vào từ sidebar/Bộ từ vựng: bộ lọc chỉ chứa bộ của chính người dùng. -->
-                <div class="C_Gocrenluyen_filterGroup">
-                    <label for="C_Gocrenluyen_collection">Bộ từ vựng cá nhân</label>
-                    <select name="collection" id="C_Gocrenluyen_collection">
-                        <option value="">Chọn bộ từ cá nhân</option>
+                <div class="C_Gocrenluyen_filterGroup C_Gocrenluyen_filterGroup--source">
+                    <label for="C_Gocrenluyen_collection">Nguồn từ vựng</label>
+                    <select name="collection" id="C_Gocrenluyen_collection" <?= !$isLoggedIn ? 'disabled' : '' ?>>
+                        <option value="">Chọn chủ đề hoặc bộ từ</option>
+                        <optgroup label="Chủ đề của hệ thống">
+                        <?php foreach ($systemTopics as $topic): ?>
+                            <?php $optionValue = 'topic:' . (int) $topic['id']; ?>
+                            <option value="<?= $optionValue ?>" <?= $selectedCollection === $optionValue ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($topic['name']) ?> (<?= (int) $topic['word_count'] ?> từ)
+                            </option>
+                        <?php endforeach; ?>
+                        </optgroup>
+                        <optgroup label="Bộ từ cá nhân của tôi">
                         <?php foreach ($personalSets as $set): ?>
                             <?php $optionValue = 'set:' . (int) $set['id']; ?>
                             <option value="<?= $optionValue ?>" <?= $selectedCollection === $optionValue ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($set['name']) ?>
+                                <?= htmlspecialchars($set['name']) ?> (<?= (int) $set['word_count'] ?> từ)
                             </option>
                         <?php endforeach; ?>
+                        </optgroup>
                     </select>
                 </div>
-            <?php endif; ?>
             <div class="C_Gocrenluyen_filterGroup">
                 <label for="C_Gocrenluyen_limit">Số lượng</label>
                 <select name="limit" id="C_Gocrenluyen_limit">
@@ -303,7 +304,7 @@ if ($flashcardStatsTotal === 0) {
                     <p><?= htmlspecialchars($sourceDescription ?: 'Sẵn sàng bắt đầu phiên học với nội dung đã chọn.') ?></p>
                     <div class="C_Gocrenluyen_badges">
                         <span><?= $wordCount ?> từ vựng</span>
-                        <span><?= $flashcardRemembered ?>/<?= $flashcardStatsTotal ?> đã thuộc qua Flashcard</span>
+                        <span><?= $masteredCount ?>/<?= $wordCount ?> từ đã thuộc theo SRS</span>
                         <span>
                             <?= $latestQuizCorrect !== null
                                 ? $latestQuizCorrect . '/' . $latestQuizTotal . ' câu đúng Quiz gần nhất'
@@ -375,19 +376,18 @@ if ($flashcardStatsTotal === 0) {
             </div>
         </section>
 
-        <?php if ($isTopicContext): ?>
+        <?php if ($hasSelectedSource): ?>
             <section class="C_Gocrenluyen_words" aria-labelledby="C_Gocrenluyen_wordsTitle">
                 <div class="C_Gocrenluyen_sectionHeading">
                     <div>
-                        <span class="C_Gocrenluyen_eyebrow">NỘI DUNG CHỦ ĐỀ</span>
+                        <span class="C_Gocrenluyen_eyebrow"><?= $source === 'topic' ? 'CHỦ ĐỀ HỆ THỐNG' : 'BỘ TỪ CÁ NHÂN' ?></span>
                         <h2 id="C_Gocrenluyen_wordsTitle">Danh sách từ vựng</h2>
                     </div>
                     <span class="C_Gocrenluyen_modeCount"><?= $wordCount ?> từ</span>
                 </div>
 
                 <form class="C_Gocrenluyen_wordToolbar" method="get">
-                    <input type="hidden" name="source" value="topic">
-                    <input type="hidden" name="id" value="<?= $sourceId ?>">
+                    <input type="hidden" name="collection" value="<?= htmlspecialchars($selectedCollection) ?>">
                     <input type="hidden" name="limit" value="<?= htmlspecialchars($limitOption) ?>">
                     <div class="C_Gocrenluyen_wordSearch">
                         <label for="C_Gocrenluyen_wordSearch">Tìm từ vựng</label>
@@ -397,6 +397,8 @@ if ($flashcardStatsTotal === 0) {
                         <label for="C_Gocrenluyen_wordStatus">Trạng thái học</label>
                         <select id="C_Gocrenluyen_wordStatus" name="word_status">
                             <option value="all" <?= $wordStatus === 'all' ? 'selected' : '' ?>>Tất cả</option>
+                            <option value="new" <?= $wordStatus === 'new' ? 'selected' : '' ?>>Mới</option>
+                            <option value="learning" <?= $wordStatus === 'learning' ? 'selected' : '' ?>>Đang học</option>
                             <option value="unmastered" <?= $wordStatus === 'unmastered' ? 'selected' : '' ?>>Chưa thuộc</option>
                             <option value="mastered" <?= $wordStatus === 'mastered' ? 'selected' : '' ?>>Đã thuộc</option>
                         </select>
@@ -404,6 +406,12 @@ if ($flashcardStatsTotal === 0) {
                     <button type="submit">Áp dụng</button>
                     <span class="C_Gocrenluyen_wordResults" role="status"><?= $filteredWordCount ?> / <?= $wordCount ?> từ</span>
                 </form>
+
+                <div class="C_Gocrenluyen_statusLegend" aria-label="Giải thích trạng thái học">
+                    <span><b class="C_Gocrenluyen_status C_Gocrenluyen_status--new">Mới</b> Chưa có lần học được ghi nhận</span>
+                    <span><b class="C_Gocrenluyen_status C_Gocrenluyen_status--learning">Đang học</b> Đã học nhưng chưa đủ 5 lần ôn thành công</span>
+                    <span><b class="C_Gocrenluyen_status C_Gocrenluyen_status--mastered">Đã thuộc</b> Đạt từ 5 lần ôn thành công; trả lời sai có thể quay lại Đang học</span>
+                </div>
 
                 <div class="C_Gocrenluyen_tableResponsive">
                     <table class="C_Gocrenluyen_table">
@@ -443,9 +451,9 @@ if ($flashcardStatsTotal === 0) {
                 </div>
 
                 <?php if ($topicWordPages > 1): ?>
-                    <nav class="C_Gocrenluyen_pagination" aria-label="Phân trang từ vựng của chủ đề">
+                    <nav class="C_Gocrenluyen_pagination" aria-label="Phân trang danh sách từ vựng">
                         <?php for ($pageNumber = 1; $pageNumber <= $topicWordPages; $pageNumber++): ?>
-                            <?php $pageQuery = http_build_query(['source' => 'topic', 'id' => $sourceId, 'limit' => $limitOption, 'word_search' => $wordSearch, 'word_status' => $wordStatus, 'word_page' => $pageNumber]); ?>
+                            <?php $pageQuery = http_build_query(['collection' => $selectedCollection, 'limit' => $limitOption, 'word_search' => $wordSearch, 'word_status' => $wordStatus, 'word_page' => $pageNumber]); ?>
                             <a class="<?= $pageNumber === $wordPage ? 'is-active' : '' ?>" href="?<?= htmlspecialchars($pageQuery) ?>"><?= $pageNumber ?></a>
                         <?php endfor; ?>
                     </nav>

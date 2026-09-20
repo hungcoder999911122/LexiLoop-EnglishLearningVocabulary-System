@@ -16,7 +16,7 @@ document.addEventListener("DOMContentLoaded", () => {
         : [];
 
     function returnToLearningPage() {
-        if (quizSessionConfig.source === "review") {
+        if (quizSessionConfig.source === "review" || quizSessionConfig.mode === "review") {
             window.location.href = "C_Ontaphomnay.php";
             return;
         }
@@ -56,6 +56,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const remainingTimes = {};
 
     async function attemptRequest(action, state = null) {
+        // Không dùng chung checkpoint giữa Quiz luyện tập và Quiz SRS của cùng chủ đề.
+        if (quizSessionConfig.mode === "review") {
+            return { success: true, attempt: null };
+        }
         const response = await fetch("../api/learning_attempt.php", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -265,6 +269,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     csrf: quizSessionConfig.csrf,
                     source: quizSessionConfig.source,
                     sourceId: quizSessionConfig.sourceId,
+                    mode: quizSessionConfig.mode || "practice",
+                    submissionToken: quizSessionConfig.submissionToken,
                     limit: quizSessionConfig.limit || "10",
                     durationSeconds: getDurationSeconds(),
                     answers
@@ -276,6 +282,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const resultQuery = new URLSearchParams({
                 id: result.quizResultId,
                 source: quizSessionConfig.source,
+                mode: quizSessionConfig.mode || "practice",
                 limit: quizSessionConfig.limit || "10"
             });
             window.location.href = `C_KetquaQuiz.php?${resultQuery.toString()}`;
@@ -308,7 +315,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     btnThoat.addEventListener("click", async () => {
         if (isSubmitting || isExiting) return;
-        if (!window.confirm("Thoát Quiz? Tiến độ hiện tại sẽ được lưu để bạn tiếp tục sau.")) return;
+        const exitMessage = quizSessionConfig.mode === "review"
+            ? "Thoát Quiz ôn tập? Tiến độ hiện tại sẽ không được lưu."
+            : "Thoát Quiz? Tiến độ hiện tại sẽ được lưu để bạn tiếp tục sau.";
+        if (!window.confirm(exitMessage)) return;
 
         clearInterval(timerInterval);
         btnThoat.disabled = true;

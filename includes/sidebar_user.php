@@ -6,7 +6,7 @@
 | basename($_SERVER['PHP_SELF']) trả về tên file đang chạy.
 | Ví dụ: C_Lichsuontap.php
 */
-$currentPage = basename($_SERVER['PHP_SELF']);
+$currentPage = $sidebarActivePage ?? basename($_SERVER['PHP_SELF']);
 
 /*
 |--------------------------------------------------------------------------

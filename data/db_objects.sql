@@ -799,6 +799,17 @@ BEGIN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'vocabulary is not in the authorized source';
         END IF;
 
+        -- Một từ chỉ được thay đổi lịch SRS một lần trong ngày. Checkpoint,
+        -- tab thứ hai hoặc Quiz sau Flashcard không được tăng/lùi lịch lần nữa.
+        IF p_source_type = 'review' AND EXISTS(
+            SELECT 1 FROM `user_vocab_progress`
+             WHERE `user_id` = p_user_id AND `vocabulary_id` = v_vocabulary_id
+               AND DATE(`last_reviewed_at`) = CURRENT_DATE
+        ) THEN
+            SET v_word_count = v_word_count + 1;
+            ITERATE status_loop;
+        END IF;
+
         -- SM-2 Algorithm Integration
         -- Dùng aggregate COALESCE(MAX(...)) để luôn trả về đúng 1 dòng (kể cả khi từ chưa có trong user_vocab_progress),
         -- tránh kích hoạt CONTINUE HANDLER FOR NOT FOUND làm cursor bị ngắt vòng lặp sớm.
@@ -891,6 +902,7 @@ CREATE PROCEDURE `sp_submit_quiz`(
     IN p_user_id INT,
     IN p_source_type VARCHAR(10),
     IN p_source_id INT,
+    IN p_mode VARCHAR(10),
     IN p_item_limit VARCHAR(10),
     IN p_answers_json JSON,
     IN p_duration_seconds INT
@@ -914,6 +926,12 @@ BEGIN
 
     IF p_source_type NOT IN ('topic', 'set', 'review') THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'invalid learning source';
+    END IF;
+    IF p_mode NOT IN ('practice', 'review') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'invalid quiz mode';
+    END IF;
+    IF p_mode = 'review' AND p_source_type NOT IN ('topic', 'review') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'invalid SRS review source';
     END IF;
     IF p_source_type <> 'review' AND (p_source_id IS NULL OR p_source_id <= 0) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'source ID is required';
@@ -952,16 +970,32 @@ BEGIN
         END IF;
         SET v_topic_id = p_source_id;
         SET v_source_id_db = p_source_id;
-        INSERT INTO `tmp_quiz_answers`
-        SELECT j.`question_order`, j.`vocabulary_id`, NULLIF(TRIM(j.`selected_answer`), ''),
-               v.`meaning`, COALESCE(LOWER(TRIM(j.`selected_answer`)) = LOWER(TRIM(v.`meaning`)), 0), j.`response_time_ms`
-          FROM JSON_TABLE(p_answers_json, '$[*]' COLUMNS (
-              `question_order` FOR ORDINALITY,
-              `vocabulary_id` INT PATH '$.vocabularyId',
-              `selected_answer` TEXT PATH '$.selectedAnswer' NULL ON EMPTY,
-              `response_time_ms` INT PATH '$.responseTimeMs' NULL ON EMPTY
-          )) j
-          JOIN `vocabulary` v ON v.`id` = j.`vocabulary_id` AND v.`topic_id` = p_source_id;
+        IF p_mode = 'review' THEN
+            INSERT INTO `tmp_quiz_answers`
+            SELECT j.`question_order`, j.`vocabulary_id`, NULLIF(TRIM(j.`selected_answer`), ''),
+                   v.`meaning`, COALESCE(LOWER(TRIM(j.`selected_answer`)) = LOWER(TRIM(v.`meaning`)), 0), j.`response_time_ms`
+              FROM JSON_TABLE(p_answers_json, '$[*]' COLUMNS (
+                  `question_order` FOR ORDINALITY,
+                  `vocabulary_id` INT PATH '$.vocabularyId',
+                  `selected_answer` TEXT PATH '$.selectedAnswer' NULL ON EMPTY,
+                  `response_time_ms` INT PATH '$.responseTimeMs' NULL ON EMPTY
+              )) j
+              JOIN `vocabulary` v ON v.`id` = j.`vocabulary_id` AND v.`topic_id` = p_source_id
+              JOIN `user_vocab_progress` p
+                ON p.`vocabulary_id` = v.`id` AND p.`user_id` = p_user_id
+               AND p.`next_review_date` <= CURRENT_DATE;
+        ELSE
+            INSERT INTO `tmp_quiz_answers`
+            SELECT j.`question_order`, j.`vocabulary_id`, NULLIF(TRIM(j.`selected_answer`), ''),
+                   v.`meaning`, COALESCE(LOWER(TRIM(j.`selected_answer`)) = LOWER(TRIM(v.`meaning`)), 0), j.`response_time_ms`
+              FROM JSON_TABLE(p_answers_json, '$[*]' COLUMNS (
+                  `question_order` FOR ORDINALITY,
+                  `vocabulary_id` INT PATH '$.vocabularyId',
+                  `selected_answer` TEXT PATH '$.selectedAnswer' NULL ON EMPTY,
+                  `response_time_ms` INT PATH '$.responseTimeMs' NULL ON EMPTY
+              )) j
+              JOIN `vocabulary` v ON v.`id` = j.`vocabulary_id` AND v.`topic_id` = p_source_id;
+        END IF;
     ELSEIF p_source_type = 'set' THEN
         IF NOT EXISTS(SELECT 1 FROM `vocabulary_sets` WHERE `id` = p_source_id AND `user_id` = p_user_id) THEN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'vocabulary set is not owned by user';
@@ -1016,11 +1050,13 @@ BEGIN
            `correct_answer`, `is_correct`, `response_time_ms`
       FROM `tmp_quiz_answers` ORDER BY `question_order`;
 
-    UPDATE `learning_attempts`
-       SET `status` = 'completed', `completed_at` = NOW(), `updated_at` = NOW()
-     WHERE `user_id` = p_user_id AND `activity_type` = 'quiz'
-       AND `source_type` = p_source_type AND `source_id` <=> v_source_id_db
-       AND `item_limit` = p_item_limit AND `status` = 'in_progress';
+    IF p_mode = 'practice' THEN
+        UPDATE `learning_attempts`
+           SET `status` = 'completed', `completed_at` = NOW(), `updated_at` = NOW()
+         WHERE `user_id` = p_user_id AND `activity_type` = 'quiz'
+           AND `source_type` = p_source_type AND `source_id` <=> v_source_id_db
+           AND `item_limit` = p_item_limit AND `status` = 'in_progress';
+    END IF;
 
     COMMIT;
     DROP TEMPORARY TABLE `tmp_quiz_answers`;
@@ -1643,6 +1679,7 @@ CREATE PROCEDURE `sp_submit_quiz`(
     IN p_user_id INT,
     IN p_source_type VARCHAR(10),
     IN p_source_id INT,
+    IN p_mode VARCHAR(10),
     IN p_item_limit VARCHAR(10),
     IN p_answers_json JSON,
     IN p_duration_seconds INT
@@ -1689,6 +1726,12 @@ BEGIN
     IF p_source_type NOT IN ('topic', 'set', 'review') THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'invalid learning source';
     END IF;
+    IF p_mode NOT IN ('practice', 'review') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'invalid quiz mode';
+    END IF;
+    IF p_mode = 'review' AND p_source_type NOT IN ('topic', 'review') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'invalid SRS review source';
+    END IF;
     IF p_source_type <> 'review' AND (p_source_id IS NULL OR p_source_id <= 0) THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'source ID is required';
     END IF;
@@ -1728,16 +1771,32 @@ BEGIN
         END IF;
         SET v_topic_id = p_source_id;
         SET v_source_id_db = p_source_id;
-        INSERT INTO `tmp_quiz_answers`
-        SELECT j.`question_order`, j.`vocabulary_id`, NULLIF(TRIM(j.`selected_answer`), ''),
-               v.`meaning`, COALESCE(LOWER(TRIM(j.`selected_answer`)) = LOWER(TRIM(v.`meaning`)), 0), j.`response_time_ms`
-          FROM JSON_TABLE(p_answers_json, '$[*]' COLUMNS (
-              `question_order` FOR ORDINALITY,
-              `vocabulary_id` INT PATH '$.vocabularyId',
-              `selected_answer` TEXT PATH '$.selectedAnswer' NULL ON EMPTY,
-              `response_time_ms` INT PATH '$.responseTimeMs' NULL ON EMPTY
-          )) j
-          JOIN `vocabulary` v ON v.`id` = j.`vocabulary_id` AND v.`topic_id` = p_source_id;
+        IF p_mode = 'review' THEN
+            INSERT INTO `tmp_quiz_answers`
+            SELECT j.`question_order`, j.`vocabulary_id`, NULLIF(TRIM(j.`selected_answer`), ''),
+                   v.`meaning`, COALESCE(LOWER(TRIM(j.`selected_answer`)) = LOWER(TRIM(v.`meaning`)), 0), j.`response_time_ms`
+              FROM JSON_TABLE(p_answers_json, '$[*]' COLUMNS (
+                  `question_order` FOR ORDINALITY,
+                  `vocabulary_id` INT PATH '$.vocabularyId',
+                  `selected_answer` TEXT PATH '$.selectedAnswer' NULL ON EMPTY,
+                  `response_time_ms` INT PATH '$.responseTimeMs' NULL ON EMPTY
+              )) j
+              JOIN `vocabulary` v ON v.`id` = j.`vocabulary_id` AND v.`topic_id` = p_source_id
+              JOIN `user_vocab_progress` p
+                ON p.`vocabulary_id` = v.`id` AND p.`user_id` = p_user_id
+               AND p.`next_review_date` <= CURRENT_DATE;
+        ELSE
+            INSERT INTO `tmp_quiz_answers`
+            SELECT j.`question_order`, j.`vocabulary_id`, NULLIF(TRIM(j.`selected_answer`), ''),
+                   v.`meaning`, COALESCE(LOWER(TRIM(j.`selected_answer`)) = LOWER(TRIM(v.`meaning`)), 0), j.`response_time_ms`
+              FROM JSON_TABLE(p_answers_json, '$[*]' COLUMNS (
+                  `question_order` FOR ORDINALITY,
+                  `vocabulary_id` INT PATH '$.vocabularyId',
+                  `selected_answer` TEXT PATH '$.selectedAnswer' NULL ON EMPTY,
+                  `response_time_ms` INT PATH '$.responseTimeMs' NULL ON EMPTY
+              )) j
+              JOIN `vocabulary` v ON v.`id` = j.`vocabulary_id` AND v.`topic_id` = p_source_id;
+        END IF;
     ELSEIF p_source_type = 'set' THEN
         IF NOT EXISTS(SELECT 1 FROM `vocabulary_sets` WHERE `id` = p_source_id AND `user_id` = p_user_id) THEN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'vocabulary set is not owned by user';
@@ -1792,19 +1851,32 @@ BEGIN
            `correct_answer`, `is_correct`, `response_time_ms`
       FROM `tmp_quiz_answers` ORDER BY `question_order`;
 
-    UPDATE `learning_attempts`
-       SET `status` = 'completed', `completed_at` = NOW(), `updated_at` = NOW()
-     WHERE `user_id` = p_user_id AND `activity_type` = 'quiz'
-       AND `source_type` = p_source_type AND `source_id` <=> v_source_id_db
-       AND `item_limit` = p_item_limit AND `status` = 'in_progress';
+    IF p_mode = 'practice' THEN
+        UPDATE `learning_attempts`
+           SET `status` = 'completed', `completed_at` = NOW(), `updated_at` = NOW()
+         WHERE `user_id` = p_user_id AND `activity_type` = 'quiz'
+           AND `source_type` = p_source_type AND `source_id` <=> v_source_id_db
+           AND `item_limit` = p_item_limit AND `status` = 'in_progress';
+    END IF;
 
     -- SRS Update Loop (SM-2 equivalent logic for Quiz)
-    SET v_done = FALSE;
-    OPEN answer_cursor;
-    answer_loop: LOOP
+    IF p_mode = 'review' THEN
+        SET v_done = FALSE;
+        OPEN answer_cursor;
+        answer_loop: LOOP
         FETCH answer_cursor INTO v_vocabulary_id, v_is_correct;
         IF v_done THEN
             LEAVE answer_loop;
+        END IF;
+
+        -- Quiz vẫn được lưu kết quả, nhưng không thay đổi SRS lần thứ hai nếu
+        -- từ này đã được Flashcard/Quiz ôn chính thức trong cùng ngày.
+        IF EXISTS(
+            SELECT 1 FROM `user_vocab_progress`
+             WHERE `user_id` = p_user_id AND `vocabulary_id` = v_vocabulary_id
+               AND DATE(`last_reviewed_at`) = CURRENT_DATE
+        ) THEN
+            ITERATE answer_loop;
         END IF;
 
         IF v_is_correct = 1 THEN
@@ -1845,7 +1917,11 @@ BEGIN
             SET v_new_ease = 1.3;
         END IF;
         
-        SET v_status = IF(v_quality >= 3, 'learning', 'forgot');
+        SET v_status = CASE
+            WHEN v_quality < 3 THEN 'learning'
+            WHEN v_repetitions >= 5 THEN 'mastered'
+            ELSE 'learning'
+        END;
 
         IF v_progress_id IS NULL THEN
             INSERT INTO `user_vocab_progress`
@@ -1860,17 +1936,19 @@ BEGIN
                    `ease_factor` = v_new_ease,
                    `repetitions` = v_repetitions,
                    `next_review_date` = DATE_ADD(CURRENT_DATE, INTERVAL v_interval DAY),
-                   `last_reviewed_at` = NOW()
+                   `last_reviewed_at` = NOW(),
+                   `last_quality_rating` = v_quality
              WHERE `id` = v_progress_id;
         END IF;
 
         INSERT INTO `review_logs`
-            (`user_id`, `vocabulary_id`, `progress_id`, `quality`, `old_interval`, `new_interval`, `old_ease`, `new_ease`, `reviewed_at`)
+            (`progress_id`, `review_date`, `quality_rating`, `response_time_ms`)
         VALUES
-            (p_user_id, v_vocabulary_id, v_progress_id, v_quality, v_old_interval, v_interval, v_old_ease, v_new_ease, NOW());
+            (v_progress_id, CURRENT_DATE, v_quality, NULL);
             
-    END LOOP;
-    CLOSE answer_cursor;
+        END LOOP;
+        CLOSE answer_cursor;
+    END IF;
 
     COMMIT;
     DROP TEMPORARY TABLE `tmp_quiz_answers`;

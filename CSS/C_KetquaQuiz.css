@@ -282,3 +282,26 @@ body,
 
     .C_KetquaQuiz_statCard { min-height: 80px; }
 }
+
+.C_KetquaQuiz_saveStatus {
+    display: flex;
+    width: min(100%, 620px);
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    margin-bottom: 24px;
+    padding: 11px 16px;
+    border: 1px solid #b9dec8;
+    border-radius: 12px;
+    color: #17633d;
+    background: #edf9f2;
+    font-size: 14px;
+    font-weight: 700;
+    text-align: center;
+}
+
+.C_KetquaQuiz_saveStatus.is-error {
+    border-color: #efc1bd;
+    color: #a4372f;
+    background: #fff2f1;
+}

@@ -5,6 +5,10 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+.C_HocFlashcard_body button {
+    margin: 0;
+}
+
 body,
 .C_HocFlashcard_body {
     margin: 0;
@@ -399,6 +403,37 @@ body,
     color: #ffffff;
     transform: translateY(-1px);
     box-shadow: 0 6px 16px rgba(45, 122, 86, 0.35);
+}
+
+/* Màn hình học tập trung không có topheader nhưng vẫn dùng theme toàn hệ thống. */
+html.dark-mode .C_HocFlashcard_exitButton {
+    border-color: #7d4747;
+    background: #3d2528;
+    color: #ffaaa5;
+}
+
+html.dark-mode .C_HocFlashcard_exitButton:hover,
+html.dark-mode .C_HocFlashcard_btnKetThuc:hover {
+    border-color: #a85d5d;
+    background: #522d31;
+    color: #ffc1bd;
+}
+
+html.dark-mode :is(.C_HocFlashcard_cardFront, .C_HocFlashcard_cardBack) {
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+html.dark-mode .C_HocFlashcard_badgeR,
+html.dark-mode .C_HocFlashcard_btnWhite.C_HocFlashcard_btnSelected {
+    border-color: #956237;
+    background: #4e351f;
+    color: #ffc47d;
+}
+
+html.dark-mode .C_HocFlashcard_btnKetThuc {
+    border-color: var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text-muted);
 }
 
 /* 

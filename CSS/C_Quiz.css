@@ -15,6 +15,10 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+.C_Quiz_body button {
+    margin: 0;
+}
+
 body,
 .C_Quiz_body {
     margin: 0;
@@ -254,6 +258,32 @@ body,
 .C_Quiz_bubble:hover { border-color: var(--color-primary); color: var(--color-primary); }
 .C_Quiz_bubbleFilled { background-color: var(--color-primary-light); border-color: var(--color-primary); color: var(--color-primary-dark); }
 .C_Quiz_bubble.active { outline: 2px solid var(--color-primary); outline-offset: 2px; font-weight: 800; }
+
+/* Quiz là màn hình tập trung nên không có topheader, nhưng vẫn nhận dark mode. */
+html.dark-mode .C_Quiz_exitButton {
+    border-color: #7d4747;
+    background: #3d2528;
+    color: #ffaaa5;
+}
+
+html.dark-mode .C_Quiz_exitButton:hover {
+    border-color: #a85d5d;
+    background: #522d31;
+}
+
+html.dark-mode .C_Quiz_timerCircle.warning {
+    border-color: #956237;
+    background: #4e351f;
+    color: #ffc47d;
+}
+
+html.dark-mode :is(.C_Quiz_questionSection, .C_Quiz_optionBtn, .C_Quiz_questionListSection) {
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
+}
+
+html.dark-mode .C_Quiz_btnGray:hover {
+    background-color: #24583e;
+}
 
 @media (max-width: 600px) {
     .C_Quiz_header { padding: 14px 16px; }

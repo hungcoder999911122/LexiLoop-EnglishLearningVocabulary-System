@@ -30,13 +30,32 @@ if (!is_string($csrf) || empty($_SESSION['C_learning_csrf']) || !hash_equals($_S
 
 $source = $payload['source'] ?? '';
 $sourceId = filter_var($payload['sourceId'] ?? 0, FILTER_VALIDATE_INT) ?: 0;
+$submissionToken = $payload['submissionToken'] ?? '';
 $duration = max(0, min(86400, (int) ($payload['durationSeconds'] ?? 0)));
 $isFinal = filter_var($payload['isFinal'] ?? true, FILTER_VALIDATE_BOOLEAN);
 $statuses = is_array($payload['statuses'] ?? null) ? $payload['statuses'] : [];
 
-if (!in_array($source, ['topic', 'set', 'review'], true) || ($source !== 'review' && $sourceId <= 0) || !$statuses) {
+if (!in_array($source, ['topic', 'set', 'review'], true)
+    || ($source !== 'review' && $sourceId <= 0)
+    || !is_string($submissionToken)
+    || !preg_match('/^[a-f0-9]{64}$/', $submissionToken)
+    || !$statuses) {
     http_response_code(422);
     echo json_encode(['success' => false, 'message' => 'Nguồn học hoặc tiến trình không hợp lệ.']);
+    exit;
+}
+
+$submission = $_SESSION['C_flashcard_submissions'][$submissionToken] ?? null;
+if (!is_array($submission)
+    || ($submission['source'] ?? null) !== $source
+    || (int) ($submission['sourceId'] ?? 0) !== $sourceId) {
+    http_response_code(409);
+    echo json_encode(['success' => false, 'message' => 'Phiên lưu Flashcard không hợp lệ hoặc đã hết hạn.']);
+    exit;
+}
+
+if (($submission['status'] ?? '') === 'completed' && is_array($submission['response'] ?? null)) {
+    echo json_encode($submission['response']);
     exit;
 }
 
@@ -53,17 +72,26 @@ try {
     $statusesJson = json_encode($validStatuses, JSON_THROW_ON_ERROR);
     $sourceIdForDb = $source === 'review' ? null : $sourceId;
     
-    error_log("save_flashcard_progress debug: userId=$userId, source=$source, sourceIdForDb=" . var_export($sourceIdForDb, true) . ", statuses=$statusesJson");
-
     $rows = dbCallProcedure(
         $link,
         'CALL sp_save_flashcard_session(?, ?, ?, ?, ?, ?)',
         'isisii',
         [$userId, $source, $sourceIdForDb, $statusesJson, $duration, $isFinal ? 1 : 0]
     );
-    $learningSessionId = $rows[0]['learning_session_id'] ?? null;
+    $learningSessionId = (int) ($rows[0]['learning_session_id'] ?? 0);
+    $savedWordCount = (int) ($rows[0]['word_count'] ?? 0);
+    if (!$isFinal || $learningSessionId <= 0 || $savedWordCount !== count($validStatuses)) {
+        throw new RuntimeException('Stored Procedure không trả về phiên Flashcard hợp lệ.');
+    }
 
-    echo json_encode(['success' => true, 'learningSessionId' => $learningSessionId]);
+    $responsePayload = [
+        'success' => true,
+        'learningSessionId' => $learningSessionId,
+        'wordCount' => $savedWordCount,
+    ];
+    $_SESSION['C_flashcard_submissions'][$submissionToken]['status'] = 'completed';
+    $_SESSION['C_flashcard_submissions'][$submissionToken]['response'] = $responsePayload;
+    echo json_encode($responsePayload);
 } catch (Throwable $error) {
     error_log('Lỗi lưu Flashcard: ' . $error->getMessage());
     http_response_code($error instanceof InvalidArgumentException ? 422 : 500);

@@ -12,6 +12,10 @@ $source = $_GET['source'] ?? 'topic';
 $source = in_array($source, ['topic', 'set', 'review'], true) ? $source : 'topic';
 $source_id = filter_var($_GET['source_id'] ?? $_GET['id'] ?? $_GET['topic_id'] ?? 0, FILTER_VALIDATE_INT) ?: 0;
 $mode = $_GET['mode'] ?? 'practice';
+$mode = in_array($mode, ['practice', 'review'], true) ? $mode : 'practice';
+if ($source === 'review') {
+    $mode = 'review';
+}
 $limit_option = (string) ($_GET['limit'] ?? '10');
 if (!in_array($limit_option, ['5', '10', '20', 'all'], true)) {
     $limit_option = '10';
@@ -20,6 +24,28 @@ if ($source !== 'review' && $source_id <= 0) {
     header('Location: C_Gocrenluyen.php');
     exit;
 }
+
+// Mỗi lần mở Quiz có một token nộp bài riêng. Token giúp request gửi lại
+// do mạng chậm không tạo thêm kết quả hoặc cộng lịch SRS lần thứ hai.
+if (!isset($_SESSION['C_quiz_submissions']) || !is_array($_SESSION['C_quiz_submissions'])) {
+    $_SESSION['C_quiz_submissions'] = [];
+}
+foreach ($_SESSION['C_quiz_submissions'] as $token => $submission) {
+    if ((int) ($submission['createdAt'] ?? 0) < time() - 7200) {
+        unset($_SESSION['C_quiz_submissions'][$token]);
+    }
+}
+while (count($_SESSION['C_quiz_submissions']) >= 20) {
+    array_shift($_SESSION['C_quiz_submissions']);
+}
+$quiz_submission_token = bin2hex(random_bytes(32));
+$_SESSION['C_quiz_submissions'][$quiz_submission_token] = [
+    'status' => 'pending',
+    'createdAt' => time(),
+    'source' => $source,
+    'sourceId' => $source_id,
+    'mode' => $mode,
+];
 
 $id_chu_de = $source === 'topic' ? $source_id : 0;
 $ten_chu_de = $source === 'review' ? 'Từ vựng cần ôn tập' : 'Nguồn học';
@@ -136,7 +162,9 @@ try {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quiz: <?php echo htmlspecialchars($ten_chu_de); ?> - LexiLoop</title>
+    <link rel="stylesheet" href="../../CSS/Style.css">
     <link rel="stylesheet" href="../../CSS/C_Quiz.css">
+    <script src="../../JS/theme.js"></script>
 </head>
 <body class="C_Quiz_body">
 
@@ -202,6 +230,8 @@ try {
                                         'csrf' => $_SESSION['C_learning_csrf'],
                                         'source' => $source,
                                         'sourceId' => $source_id,
+                                        'mode' => $mode,
+                                        'submissionToken' => $quiz_submission_token,
                                         'limit' => $limit_option
                                     ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?>;
     </script>

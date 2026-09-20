@@ -7,18 +7,23 @@ $user_id = (int) $_SESSION['user_id'];
 
 // Khởi tạo các giá trị mặc định
 $diem_so      = 0;
-$tong_cau     = 10;
+$tong_cau     = 0;
 $thoi_gian    = "0:00";
 $cau_sai      = [];
 $retry_url    = 'C_Gocrenluyen.php';
+$retry_label  = 'Làm lại Quiz';
+$result_saved = false;
+$result_error = '';
 $quiz_result_id = isset($_GET['id']) ? intval($_GET['id']) : (isset($_GET['quiz_id']) ? intval($_GET['quiz_id']) : 0);
 $result_source = $_GET['source'] ?? '';
+$result_mode = ($_GET['mode'] ?? 'practice') === 'review' ? 'review' : 'practice';
 $retry_limit = (string) ($_GET['limit'] ?? '10');
 if (!in_array($retry_limit, ['5', '10', '20', 'all'], true)) {
     $retry_limit = '10';
 }
-if ($result_source === 'review') {
-    $retry_url = 'C_Quiz.php?' . http_build_query(['source' => 'review', 'limit' => $retry_limit]);
+if ($result_source === 'review' || $result_mode === 'review') {
+    $retry_url = 'C_Ontaphomnay.php';
+    $retry_label = 'Quay lại ôn tập';
 }
 
 // Hàm định dạng số giây thành "Phút:Giây"
@@ -43,20 +48,25 @@ try {
         : dbSelectView($link, $summarySql, 'i', [$user_id]);
 
     if ($summaryRows) {
+        $result_saved = true;
         $row = $summaryRows[0];
         $quiz_result_id = (int) $row['quiz_result_id'];
         $diem_so = (int) $row['correct_answers'];
         $tong_cau = (int) $row['total_questions'];
         $thoi_gian = dinhDangThoiGianLam($row['duration_seconds'] ?? 0);
-        if (!empty($row['vocabulary_set_id'])) {
+        if ($result_mode !== 'review' && !empty($row['vocabulary_set_id'])) {
             $retry_url = 'C_Quiz.php?' . http_build_query([
-                'source' => 'set', 'id' => (int) $row['vocabulary_set_id'], 'limit' => $retry_limit,
+                'source' => 'set', 'id' => (int) $row['vocabulary_set_id'],
+                'mode' => $result_mode, 'limit' => $retry_limit,
             ]);
-        } elseif (!empty($row['topic_id'])) {
+        } elseif ($result_mode !== 'review' && !empty($row['topic_id'])) {
             $retry_url = 'C_Quiz.php?' . http_build_query([
-                'source' => 'topic', 'id' => (int) $row['topic_id'], 'limit' => $retry_limit,
+                'source' => 'topic', 'id' => (int) $row['topic_id'],
+                'mode' => $result_mode, 'limit' => $retry_limit,
             ]);
         }
+    } else {
+        $result_error = 'Không tìm thấy kết quả Quiz đã lưu cho tài khoản này.';
     }
 
     if ($quiz_result_id > 0) {
@@ -80,6 +90,7 @@ try {
     }
 } catch (Throwable $error) {
     error_log('Lỗi Kết quả Quiz: ' . $error->getMessage());
+    $result_error = 'Không thể tải bản ghi kết quả Quiz.';
 }
 
 // --- TÍNH TOÁN TỶ LỆ VÀ XẾP LOẠI ---
@@ -128,6 +139,11 @@ if ($diem_so >= $tong_cau) {
 
     <main class="C_KetquaQuiz_main">
 
+        <div class="C_KetquaQuiz_saveStatus <?php echo $result_saved ? 'is-saved' : 'is-error'; ?>" role="status">
+            <span aria-hidden="true"><?php echo $result_saved ? '✓' : '!'; ?></span>
+            <?php echo htmlspecialchars($result_saved ? 'Kết quả và tiến độ ôn tập đã được ghi nhận.' : $result_error); ?>
+        </div>
+
         <!-- Vòng tròn hiển thị điểm -->
         <div class="C_KetquaQuiz_scoreCircle" id="C_KetquaQuiz_scoreCircle">
             <span class="C_KetquaQuiz_scoreText" id="C_KetquaQuiz_scoreText">
@@ -164,7 +180,7 @@ if ($diem_so >= $tong_cau) {
                 Xem lại câu sai
             </button>
             <button type="button" id="C_KetquaQuiz_btnLamLai" class="C_KetquaQuiz_btn C_KetquaQuiz_btnPrimary">
-                Làm lại Quiz
+                <?php echo htmlspecialchars($retry_label); ?>
             </button>
             <button type="button" id="C_KetquaQuiz_btnDashboard" class="C_KetquaQuiz_btn C_KetquaQuiz_btnWhite">
                 Về Dashboard
