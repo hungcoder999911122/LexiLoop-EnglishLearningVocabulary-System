@@ -76,9 +76,9 @@ unset($row);
                 <h2 id="dashboard-welcome-title">Chào mừng trở lại, <?= htmlspecialchars($fullName) ?>!</h2>
                 <p>
                     <?php if ($reviewToday > 0): ?>
-                        Có <strong><?= $reviewToday ?> từ</strong> đang chờ bạn ôn tập hôm nay.
+                        Có <strong><?= $reviewToday ?> chủ đề</strong> đang chờ bạn ôn tập hôm nay.
                     <?php else: ?>
-                        Hôm nay chưa có từ đến hạn. Bạn có thể tự chọn và học thêm một chủ đề mới.
+                        Hôm nay chưa có chủ đề đến hạn. Bạn có thể tự chọn và học thêm các từ của chủ đề mới.
                     <?php endif; ?>
                 </p>
                 <a href="C_Ontaphomnay.php" class="C_Dashboard_user_primaryButton">
