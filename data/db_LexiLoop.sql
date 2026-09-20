@@ -25,20 +25,6 @@ USE `db_LexiLoop`;
 -- --------------------------------------------------------
 
 --
--- Table structure for table `favorites`
---
-
---
--- Dumping data for table `favorites`
---
-
-INSERT INTO `favorites` (`id`, `user_id`, `vocabulary_id`, `created_at`) VALUES
-(1, 2, 1, '2026-08-28 16:40:44'),
-(2, 2, 2, '2026-08-28 16:40:44');
-
--- --------------------------------------------------------
-
---
 -- Table structure for table `learning_sessions`
 --
 
@@ -84,19 +70,6 @@ CREATE TABLE `learning_attempts` (
   PRIMARY KEY (`id`),
   KEY `idx_attempt_resume` (`user_id`,`activity_type`,`source_type`,`source_id`,`status`,`updated_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `password_resets`
---
-
---
--- Dumping data for table `password_resets`
---
-
-INSERT INTO `password_resets` (`id`, `email`, `otp_code`, `expires_at`, `created_at`) VALUES
-(1, 'quan@gmail.com', '123456', '2026-08-28 16:55:44', '2026-08-28 16:40:44');
 
 -- --------------------------------------------------------
 
@@ -243,13 +216,6 @@ INSERT INTO `Topics` (`topicID`, `topicName`, `topicDescription`, `category`, `c
 -- --------------------------------------------------------
 
 --
--- Stand-in structure for view `tu_vung`
--- (See below for the actual view)
---
-
--- --------------------------------------------------------
-
---
 -- Table structure for table `Users`
 --
 
@@ -283,12 +249,6 @@ INSERT INTO `Users` (`userID`, `email`, `password_hash`, `full_name`, `avatar_ur
 -- Tuấn Hùng: Tuanhung@123
 -- Lê Quân: 12345678
 -- admin: 123456
--- --------------------------------------------------------
-
---
--- Table structure for table `user_login_sessions`
---
-
 -- --------------------------------------------------------
 
 --
@@ -544,8 +504,19 @@ INSERT INTO `vocabulary` (`id`, `topic_id`, `word`, `pronunciation`, `part_of_sp
 -- --------------------------------------------------------
 
 --
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `vocabulary_images`
 --
+
+CREATE TABLE `vocabulary_images` (
+  `id` int NOT NULL,
+  `vocabulary_id` int NOT NULL,
+  `image_url` varchar(255) NOT NULL,
+  `uploaded_by` int DEFAULT NULL,
+  `uploaded_at` datetime DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
 -- Dumping data for table `vocabulary_images`
@@ -555,9 +526,6 @@ INSERT INTO `vocabulary_images` (`id`, `vocabulary_id`, `image_url`, `uploaded_b
 (1, 1, 'https://images.unsplash.com/photo-elephant.jpg', 1, '2026-08-28 16:40:44'),
 (2, 2, 'https://images.unsplash.com/photo-algorithm.jpg', 1, '2026-08-28 16:40:44');
 
--- --------------------------------------------------------
-
---
 -- Table structure for table `vocabulary_sets`
 --
 
@@ -589,10 +557,6 @@ CREATE TABLE `vocabulary_set_items` (
 --
 
 --
--- Indexes for table `favorites`
---
-
---
 -- Indexes for table `learning_sessions`
 --
 ALTER TABLE `learning_sessions`
@@ -601,10 +565,6 @@ ALTER TABLE `learning_sessions`
   ADD KEY `idx_learning_sessions_user_date` (`user_id`,`session_date`),
   ADD KEY `idx_learning_sessions_topic` (`topic_id`),
   ADD KEY `idx_learning_sessions_set` (`vocabulary_set_id`);
-
---
--- Indexes for table `password_resets`
---
 
 --
 -- Indexes for table `quiz_answer_details`
@@ -652,10 +612,6 @@ ALTER TABLE `Users`
   ADD UNIQUE KEY `email` (`email`);
 
 --
--- Indexes for table `user_login_sessions`
---
-
---
 -- Indexes for table `user_vocab_progress`
 --
 ALTER TABLE `user_vocab_progress`
@@ -672,10 +628,14 @@ ALTER TABLE `vocabulary`
   ADD KEY `created_by` (`created_by`);
 
 --
+--
 -- Indexes for table `vocabulary_images`
 --
+ALTER TABLE `vocabulary_images`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `vocabulary_id` (`vocabulary_id`),
+  ADD KEY `uploaded_by` (`uploaded_by`);
 
---
 -- Indexes for table `vocabulary_sets`
 --
 ALTER TABLE `vocabulary_sets`
@@ -696,18 +656,10 @@ ALTER TABLE `vocabulary_set_items`
 --
 
 --
--- AUTO_INCREMENT for table `favorites`
---
-
---
 -- AUTO_INCREMENT for table `learning_sessions`
 --
 ALTER TABLE `learning_sessions`
   MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
-
---
--- AUTO_INCREMENT for table `password_resets`
---
 
 --
 -- AUTO_INCREMENT for table `quiz_answer_details`
@@ -740,10 +692,6 @@ ALTER TABLE `Users`
   MODIFY `userID` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
--- AUTO_INCREMENT for table `user_login_sessions`
---
-
---
 -- AUTO_INCREMENT for table `user_vocab_progress`
 --
 ALTER TABLE `user_vocab_progress`
@@ -756,10 +704,12 @@ ALTER TABLE `vocabulary`
   MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=202;
 
 --
+--
 -- AUTO_INCREMENT for table `vocabulary_images`
 --
+ALTER TABLE `vocabulary_images`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
---
 -- AUTO_INCREMENT for table `vocabulary_sets`
 --
 ALTER TABLE `vocabulary_sets`
@@ -774,18 +724,7 @@ ALTER TABLE `vocabulary_set_items`
 -- --------------------------------------------------------
 
 --
--- Structure for view `tu_vung`
---
-DROP TABLE IF EXISTS `tu_vung`;
-
-CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`%` SQL SECURITY DEFINER VIEW `tu_vung`  AS SELECT `vocabulary`.`id` AS `id`, `vocabulary`.`topic_id` AS `topic_id`, `vocabulary`.`word` AS `word`, `vocabulary`.`pronunciation` AS `pronunciation`, `vocabulary`.`part_of_speech` AS `part_of_speech`, `vocabulary`.`meaning` AS `meaning`, `vocabulary`.`example_sentence` AS `example_sentence`, `vocabulary`.`created_by` AS `created_by`, `vocabulary`.`created_at` AS `created_at`, `vocabulary`.`audio_url` AS `audio_url` FROM `vocabulary` ;
-
---
 -- Constraints for dumped tables
---
-
---
--- Constraints for table `favorites`
 --
 
 --
@@ -824,10 +763,6 @@ ALTER TABLE `Topics`
   ADD CONSTRAINT `Topics_ibfk_1` FOREIGN KEY (`created_by`) REFERENCES `Users` (`userID`) ON DELETE SET NULL;
 
 --
--- Constraints for table `user_login_sessions`
---
-
---
 -- Constraints for table `user_vocab_progress`
 --
 ALTER TABLE `user_vocab_progress`
@@ -842,10 +777,13 @@ ALTER TABLE `vocabulary`
   ADD CONSTRAINT `vocabulary_ibfk_2` FOREIGN KEY (`created_by`) REFERENCES `Users` (`userID`) ON DELETE SET NULL;
 
 --
+--
 -- Constraints for table `vocabulary_images`
 --
+ALTER TABLE `vocabulary_images`
+  ADD CONSTRAINT `vocabulary_images_ibfk_1` FOREIGN KEY (`vocabulary_id`) REFERENCES `vocabulary` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `vocabulary_images_ibfk_2` FOREIGN KEY (`uploaded_by`) REFERENCES `Users` (`userID`) ON DELETE SET NULL;
 
---
 -- Constraints for table `vocabulary_sets`
 --
 ALTER TABLE `vocabulary_sets`
