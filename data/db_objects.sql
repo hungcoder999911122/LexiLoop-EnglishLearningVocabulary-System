@@ -442,6 +442,7 @@ BEGIN
      LIMIT 1;
 END$$
 
+-- TS Đăng ký tài khoản
 CREATE PROCEDURE `sp_auth_register_user`(
     IN p_full_name VARCHAR(100),
     IN p_email VARCHAR(50),
@@ -463,6 +464,7 @@ BEGIN
     VALUES (TRIM(p_full_name), LOWER(TRIM(p_email)), p_password_hash, 'user', 'active');
 
     SELECT LAST_INSERT_ID() AS `user_id`;
+    -- 
 END$$
 
 CREATE PROCEDURE `sp_auth_update_account_settings`(
@@ -580,16 +582,18 @@ BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'invalid duration';
     END IF;
 
+    -- TS Flashcard/SRS
     START TRANSACTION;
     SELECT EXISTS(SELECT 1 FROM `Users` WHERE `userID` = p_user_id AND `status` = 'active')
       INTO v_user_exists;
     IF NOT v_user_exists THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'active user not found';
     END IF;
-    -- A consistent parent lock serializes concurrent learning writes per user.
+    
     SELECT `userID`, COALESCE(`srs_base_ease`, 2.5), COALESCE(`srs_min_interval`, 1) 
       INTO v_locked_user_id, v_base_ease, v_min_interval 
       FROM `Users` WHERE `userID` = p_user_id FOR UPDATE;
+    -- 
 
     IF p_source_type = 'topic' THEN
         IF NOT EXISTS(SELECT 1 FROM `Topics` WHERE `topicID` = p_source_id) THEN
@@ -936,6 +940,7 @@ BEGIN
     END IF;
 
     SET v_source_id_db = IF(p_source_type = 'review', NULL, p_source_id);
+    --  Quản lý phiên học dở
     START TRANSACTION;
     IF NOT EXISTS(SELECT 1 FROM `Users` WHERE `userID` = p_user_id AND `status` = 'active') THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'active user not found';
@@ -955,6 +960,7 @@ BEGIN
      WHERE `user_id` = p_user_id AND `activity_type` = p_activity_type
        AND `source_type` = p_source_type AND `source_id` <=> v_source_id_db
        AND `item_limit` = p_item_limit AND `status` = 'in_progress';
+    -- 
 
     IF p_action = 'save' THEN
         IF v_attempt_id IS NULL THEN
@@ -1057,7 +1063,8 @@ BEGIN
     IF CHAR_LENGTH(TRIM(p_word)) = 0 OR CHAR_LENGTH(TRIM(p_meaning)) = 0
        OR p_part_of_speech NOT IN ('noun','verb','adjective','adverb','pronoun','preposition','conjunction','phrase','other') THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'invalid personal vocabulary data';
-    END IF;
+    END IF; 
+    -- Từ vựng cá nhân
     START TRANSACTION;
     SELECT `userID` INTO v_user_lock FROM `Users`
      WHERE `userID` = p_user_id AND `status` = 'active' FOR UPDATE;
@@ -1078,6 +1085,7 @@ BEGIN
         SET v_id = LAST_INSERT_ID();
         INSERT INTO `user_vocab_progress` (`user_id`, `vocabulary_id`, `status`, `next_review_date`)
         VALUES (p_user_id, v_id, 'new', CURRENT_DATE);
+    -- 
     ELSE
         SELECT `id` INTO v_id FROM `vocabulary`
          WHERE `id` = p_vocabulary_id AND `created_by` = p_user_id FOR UPDATE;
@@ -1140,6 +1148,7 @@ BEGIN
     SELECT v_updated AS `updated_count`;
 END$$
 
+-- Quản trị học liệu
 CREATE PROCEDURE `sp_admin_save_vocabulary`(
     IN p_actor_id INT, IN p_vocabulary_id INT, IN p_topic_id INT,
     IN p_word VARCHAR(100), IN p_pronunciation VARCHAR(100),
@@ -1174,6 +1183,7 @@ BEGIN
         INSERT INTO `vocabulary` (`topic_id`, `word`, `pronunciation`, `part_of_speech`, `meaning`, `example_sentence`, `created_by`)
         VALUES (v_valid_topic, TRIM(p_word), NULLIF(TRIM(p_pronunciation), ''), NULLIF(TRIM(p_part_of_speech), ''),
                 TRIM(p_meaning), NULLIF(TRIM(p_example_sentence), ''), p_actor_id);
+    --  
     ELSE
         IF NOT EXISTS(SELECT 1 FROM `vocabulary` WHERE `id` = p_vocabulary_id) THEN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'vocabulary not found';
@@ -1514,6 +1524,7 @@ BEGIN
         PRIMARY KEY (`vocabulary_id`)
     ) ENGINE=InnoDB;
 
+    -- TS Quiz
     START TRANSACTION;
     IF NOT EXISTS(SELECT 1 FROM `Users` WHERE `userID` = p_user_id AND `status` = 'active') THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'active user not found';
@@ -1521,6 +1532,7 @@ BEGIN
     SELECT `userID`, COALESCE(`srs_base_ease`, 2.5), COALESCE(`srs_min_interval`, 1) 
       INTO v_locked_user_id, v_base_ease, v_min_interval 
       FROM `Users` WHERE `userID` = p_user_id FOR UPDATE;
+    -- 
 
     SET v_input_count = JSON_LENGTH(p_answers_json);
     IF p_source_type = 'topic' THEN
