@@ -190,27 +190,27 @@ CREATE TABLE `Topics` (
 --
 -- Dumping data for table `Topics`
 --
-
+  
 INSERT INTO `Topics` (`topicID`, `topicName`, `topicDescription`, `category`, `created_by`, `topicCreated_at`) VALUES
 (1, 'Animals', 'Từ vựng về các loài động vật', 'common', 1, '2026-08-28 16:40:44'),
 (2, 'Technology', 'Từ vựng về công nghệ và kỹ thuật số', 'common', 1, '2026-08-28 16:40:44'),
-(3, 'Food & Drink', 'Từ vựng về ẩm thực và đồ uống', 'common', 2, '2026-08-28 16:40:44'),
-(4, 'Travel', 'Từ vựng liên quan đến du lịch và di chuyển', 'common', 2, '2026-08-28 16:40:44'),
+(3, 'Food & Drink', 'Từ vựng về ẩm thực và đồ uống', 'common', 1, '2026-08-28 16:40:44'),
+(4, 'Travel', 'Từ vựng liên quan đến du lịch và di chuyển', 'common', 1, '2026-08-28 16:40:44'),
 (5, 'Business', 'Từ vựng trong môi trường kinh doanh', 'common', 1, '2026-08-28 16:40:44'),
 (6, 'Health & Medical', 'Từ vựng về sức khỏe, y tế và chăm sóc cơ thể', 'common', 1, '2026-08-28 16:40:44'),
 (7, 'Education', 'Từ vựng về giáo dục và học thuật', 'common', 1, '2026-08-28 16:40:44'),
-(8, 'Environment', 'Từ vựng về môi trường và thiên nhiên', 'common', 2, '2026-08-28 16:40:44'),
-(9, 'Entertainment', 'Từ vựng về giải trí, nghệ thuật và sở thích', 'common', 2, '2026-08-28 16:40:44'),
+(8, 'Environment', 'Từ vựng về môi trường và thiên nhiên', 'common', 1, '2026-08-28 16:40:44'),
+(9, 'Entertainment', 'Từ vựng về giải trí, nghệ thuật và sở thích', 'common', 1, '2026-08-28 16:40:44'),
 (10, 'Shopping', 'Từ vựng về mua sắm và giao dịch', 'common', 1, '2026-08-28 16:40:44'),
 (11, 'Sports', 'Từ vựng về các thể loại thể thao và vận động', 'common', 1, '2026-08-28 16:40:44'),
 (12, 'Music', 'Từ vựng về âm nhạc và dụng cụ âm nhạc', 'common', 1, '2026-08-28 16:40:44'),
-(13, 'Weather', 'Từ vựng về thời tiết và khí hậu', 'common', 2, '2026-08-28 16:40:44'),
-(14, 'Fashion', 'Từ vựng về thời trang và trang phục', 'common', 2, '2026-08-28 16:40:44'),
+(13, 'Weather', 'Từ vựng về thời tiết và khí hậu', 'common', 1, '2026-08-28 16:40:44'),
+(14, 'Fashion', 'Từ vựng về thời trang và trang phục', 'common', 1, '2026-08-28 16:40:44'),
 (15, 'Workplace', 'Từ vựng về văn phòng và công việc hàng ngày', 'common', 1, '2026-08-28 16:40:44'),
 (16, 'Finance', 'Từ vựng về tài chính và ngân hàng', 'common', 1, '2026-08-28 16:40:44'),
 (17, 'Transportation', 'Từ vựng về phương tiện giao thông', 'common', 1, '2026-08-28 16:40:44'),
-(18, 'Science', 'Từ vựng về khoa học và nghiên cứu', 'common', 2, '2026-08-28 16:40:44'),
-(19, 'Architecture', 'Từ vựng về kiến trúc và xây dựng', 'common', 2, '2026-08-28 16:40:44'),
+(18, 'Science', 'Từ vựng về khoa học và nghiên cứu', 'common', 1, '2026-08-28 16:40:44'),
+(19, 'Architecture', 'Từ vựng về kiến trúc và xây dựng', 'common', 1  , '2026-08-28 16:40:44'),
 (20, 'Emotions', 'Từ vựng mô tả cảm xúc và tâm lý', 'common', 1, '2026-08-28 16:40:44');
 
 -- --------------------------------------------------------

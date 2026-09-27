@@ -7,12 +7,22 @@ $link = getDatabaseConnection();
 $thongBao = '';
 $loaiThongBao = '';
 
+if (empty($_SESSION['admin_settings_csrf'])) {
+    $_SESSION['admin_settings_csrf'] = bin2hex(random_bytes(32));
+}
+$settingsCsrfToken = $_SESSION['admin_settings_csrf'];
+
 $cacTruongWeb = ['site_name', 'site_slogan', 'site_language', 'maintenance_mode'];
 // Cấu hình học tập (đã bỏ xp_per_quiz)
 $cacTruongHocTap = ['quiz_default_questions', 'daily_word_limit', 'spaced_repetition_intervals'];
 
 try {
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $submittedCsrf = (string) ($_POST['csrf_token'] ?? '');
+        if (!hash_equals($settingsCsrfToken, $submittedCsrf)) {
+            throw new RuntimeException('Phiên thao tác không hợp lệ. Vui lòng tải lại trang.');
+        }
+
         $action = (string) ($_POST['hanhdong'] ?? '');
         
         $fields = [];
@@ -173,6 +183,7 @@ function layGiaTri($caiDat, $key, $macDinh = '') {
                   </div>
                 </div>
                 <input type="hidden" name="hanhdong" value="luu_web" />
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($settingsCsrfToken, ENT_QUOTES, 'UTF-8'); ?>" />
                 
                 <div class="form-group">
                   <label class="D_Caidathethong_Nhan">Tên website <span class="required">*</span></label>
@@ -233,6 +244,7 @@ function layGiaTri($caiDat, $key, $macDinh = '') {
                   </div>
                 </div>
                 <input type="hidden" name="hanhdong" value="luu_hoctap" />
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($settingsCsrfToken, ENT_QUOTES, 'UTF-8'); ?>" />
                 <div class="form-group">
                   <label class="D_Caidathethong_Nhan">Số câu hỏi mặc định / 1 Quiz</label>
                   <input type="number" name="quiz_default_questions" class="D_Caidathethong_ONhap" placeholder="15" value="<?php echo layGiaTri($caiDat, 'quiz_default_questions', '15'); ?>" min="5" max="100" />

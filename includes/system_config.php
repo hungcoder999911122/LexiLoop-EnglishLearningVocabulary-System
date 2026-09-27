@@ -54,7 +54,19 @@ if ($isMaintenance) {
 
             // Nếu KHÔNG phải là admin thì đá ra trang bảo trì
             if (!$isAdmin) {
-                // Hủy session của user bình thường (nếu muốn bắt đăng nhập lại sau bảo trì), hoặc chỉ đơn giản là chuyển hướng.
+                // Chỉ ghi nhớ request GET nội bộ. Không lưu POST vì không thể
+                // phát lại an toàn sau bảo trì, và không nhận URL bên ngoài để
+                // tránh lỗ hổng open redirect.
+                if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET'
+                    && str_starts_with($currentUri, '/')
+                    && !str_starts_with($currentUri, '//')
+                    && !str_contains($currentUri, "\r")
+                    && !str_contains($currentUri, "\n")
+                    && strpos($currentUri, '/pages/main/maintenance.php') === false
+                ) {
+                    $_SESSION['maintenance_return_uri'] = $currentUri;
+                }
+
                 header("Location: /pages/main/maintenance.php");
                 exit();
             }

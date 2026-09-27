@@ -109,6 +109,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
     padding: 22px;
     overflow: hidden;
     text-align: left;
+    text-decoration: none;
     color: var(--review-ink);
     border: 1px solid var(--review-line);
     border-radius: 22px;

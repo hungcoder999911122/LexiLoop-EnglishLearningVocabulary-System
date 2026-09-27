@@ -1,9 +1,26 @@
 <?php
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
 require_once($_SERVER['DOCUMENT_ROOT'] . "/Connect.php");
 
-// Nếu hệ thống ĐÃ TẮT bảo trì, chuyển hướng về trang chủ
+// Khi bảo trì kết thúc, quay về request GET nội bộ đã bị chặn trước đó. Nếu
+// không có đích an toàn (ví dụ request ban đầu là POST), quay về đăng nhập.
 if (getSystemSetting($link, 'maintenance_mode') !== '1') {
-    header("Location: /index.php");
+    $returnUri = $_SESSION['maintenance_return_uri'] ?? '/pages/auth/A_DangNhap.php';
+    unset($_SESSION['maintenance_return_uri']);
+
+    if (!is_string($returnUri)
+        || !str_starts_with($returnUri, '/')
+        || str_starts_with($returnUri, '//')
+        || str_contains($returnUri, "\r")
+        || str_contains($returnUri, "\n")
+        || str_contains($returnUri, '/pages/main/maintenance.php')
+        || str_contains($returnUri, '/pages/admin/')
+    ) {
+        $returnUri = '/pages/auth/A_DangNhap.php';
+    }
+
+    header('Location: ' . $returnUri, true, 302);
     exit();
 }
 
@@ -16,6 +33,7 @@ $siteLogo = getSystemSetting($link, 'site_logo', '/assets/images/logo.png');
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="refresh" content="10">
     <title>Bảo trì hệ thống - <?php echo htmlspecialchars($siteName); ?></title>
     <style>
         body {
@@ -72,7 +90,8 @@ $siteLogo = getSystemSetting($link, 'site_logo', '/assets/images/logo.png');
         <img src="<?php echo htmlspecialchars($siteLogo); ?>" alt="Logo" class="maintenance-logo">
         <h1>Hệ thống đang bảo trì</h1>
         <p>Xin lỗi vì sự bất tiện này. Chúng tôi đang thực hiện nâng cấp hệ thống và sẽ sớm quay lại. Vui lòng thử lại sau ít phút.</p>
-        <p>Nếu bạn là Quản trị viên, vui lòng tiếp tục cập nhạt để hệ thống có thể sớm đi vào hoạt động bình thường</p>
+        <p>Trang sẽ tự kiểm tra lại sau mỗi 10 giây và đưa bạn về trang trước đó khi hệ thống hoạt động trở lại.</p>
+        <button type="button" class="btn-admin" onclick="window.location.reload()">Kiểm tra lại ngay</button>
     </div>
 </body>
 </html>

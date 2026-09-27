@@ -1,4 +1,8 @@
 <?php
+header('Content-Type: application/json; charset=utf-8');
+
+// Dùng cùng kiểm tra status với trang HTML, nhưng phản hồi JSON cho fetch/AJAX.
+$authGuardResponseType = 'json';
 require_once($_SERVER['DOCUMENT_ROOT'] . '/includes/auth_guard.php');
 require_once($_SERVER['DOCUMENT_ROOT'] . '/Connect.php');
 

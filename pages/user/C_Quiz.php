@@ -13,6 +13,7 @@ $source = in_array($source, ['topic', 'set', 'review'], true) ? $source : 'topic
 $source_id = filter_var($_GET['source_id'] ?? $_GET['id'] ?? $_GET['topic_id'] ?? 0, FILTER_VALIDATE_INT) ?: 0;
 $mode = $_GET['mode'] ?? 'practice';
 $mode = in_array($mode, ['practice', 'review'], true) ? $mode : 'practice';
+$review_scope = ($_GET['scope'] ?? '') === 'unassigned' ? 'unassigned' : 'all';
 if ($source === 'review') {
     $mode = 'review';
 }
@@ -97,12 +98,26 @@ try {
             [$source, $source_id, $user_id]
         );
     } else {
-        $topic_words = dbSelectView(
-            $link,
-            'SELECT vocabulary_id AS id, word, meaning FROM vw_learning_items WHERE source_type = ? AND owner_user_id = ?',
-            'si',
-            [$source, $user_id]
-        );
+        if ($review_scope === 'unassigned') {
+            // Chỉ lấy từ đến hạn không thuộc chủ đề; Stored Procedure vẫn xác
+            // thực từng vocabulary_id thuộc hàng đợi review của user.
+            $topic_words = dbSelectView(
+                $link,
+                'SELECT vocabulary_id AS id, word, meaning
+                   FROM vw_user_progress
+                  WHERE user_id = ? AND topic_id IS NULL AND next_review_date <= CURRENT_DATE',
+                'i',
+                [$user_id]
+            );
+            $ten_chu_de = 'Ôn tập tổng hợp';
+        } else {
+            $topic_words = dbSelectView(
+                $link,
+                'SELECT vocabulary_id AS id, word, meaning FROM vw_learning_items WHERE source_type = ? AND owner_user_id = ?',
+                'si',
+                [$source, $user_id]
+            );
+        }
     }
     shuffle($topic_words);
     if ($limit_option !== 'all') {

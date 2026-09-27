@@ -8,6 +8,8 @@ $srs_base_ease = 2.5;
 $srs_min_interval = 1;
 $tu_can_on_tap = 0;
 $so_tu_qua_han = 0;
+$so_tu_khong_chu_de = 0;
+$so_tu_khong_chu_de_qua_han = 0;
 $dueTopics = [];
 
 $levelDefinitions = [
@@ -30,6 +32,25 @@ try {
         'i',
         [$user_id]
     );
+
+    // Đếm toàn bộ lịch SRS, kể cả từ cá nhân không thuộc chủ đề. Điều kiện
+    // này đồng nhất với số lượng được hiển thị trên Dashboard.
+    $dueSummaryRows = dbSelectView(
+        $link,
+        'SELECT COUNT(*) AS total_due,
+                SUM(CASE WHEN next_review_date < CURRENT_DATE THEN 1 ELSE 0 END) AS overdue_count,
+                SUM(CASE WHEN topic_id IS NULL THEN 1 ELSE 0 END) AS unassigned_count,
+                SUM(CASE WHEN topic_id IS NULL AND next_review_date < CURRENT_DATE THEN 1 ELSE 0 END) AS unassigned_overdue_count
+           FROM vw_user_progress
+          WHERE user_id = ? AND next_review_date <= CURRENT_DATE',
+        'i',
+        [$user_id]
+    );
+    $dueSummary = $dueSummaryRows[0] ?? [];
+    $tu_can_on_tap = (int) ($dueSummary['total_due'] ?? 0);
+    $so_tu_qua_han = (int) ($dueSummary['overdue_count'] ?? 0);
+    $so_tu_khong_chu_de = (int) ($dueSummary['unassigned_count'] ?? 0);
+    $so_tu_khong_chu_de_qua_han = (int) ($dueSummary['unassigned_overdue_count'] ?? 0);
 
     // Mỗi chủ đề có một phân bố level riêng để tránh biểu đồ tổng hợp gây hiểu nhầm.
     $levelRows = dbSelectView(
@@ -58,18 +79,15 @@ try {
 
     foreach ($dueTopics as &$topic) {
         $topic['levels'] = $levelsByTopic[(int) $topic['topic_id']] ?? ['Lv0' => 0, 'Lv1' => 0, 'Lv2' => 0, 'Lv3+' => 0];
-        $tu_can_on_tap += (int) $topic['due_word_count'];
-        if ((int) $topic['overdue_days'] > 0) {
-            $so_tu_qua_han += (int) $topic['due_word_count'];
-        }
     }
     unset($topic);
 } catch (Throwable $error) {
     error_log('Lỗi Ôn tập hôm nay: ' . $error->getMessage());
 }
 
-$so_chu_de_den_han = count($dueTopics);
-$so_chu_de_qua_han = count(array_filter($dueTopics, static fn(array $topic): bool => (int) $topic['overdue_days'] > 0));
+$so_chu_de_den_han = count($dueTopics) + ($so_tu_khong_chu_de > 0 ? 1 : 0);
+$so_chu_de_qua_han = count(array_filter($dueTopics, static fn(array $topic): bool => (int) $topic['overdue_days'] > 0))
+    + ($so_tu_khong_chu_de_qua_han > 0 ? 1 : 0);
 ?>
 <!DOCTYPE html>
 <html lang="vi">
@@ -107,7 +125,7 @@ $so_chu_de_qua_han = count(array_filter($dueTopics, static fn(array $topic): boo
                 </div>
                 <div class="C_Ontaphomnay_heroStats" aria-label="Tổng quan lịch ôn">
                     <div class="C_Ontaphomnay_stat is-primary"><b><?php echo $tu_can_on_tap; ?></b><span>Từ cần ôn</span></div>
-                    <div class="C_Ontaphomnay_stat"><b><?php echo $so_chu_de_den_han; ?></b><span>Chủ đề đến hạn</span></div>
+                    <div class="C_Ontaphomnay_stat"><b><?php echo $so_chu_de_den_han; ?></b><span>Nhóm đến hạn</span></div>
                     <div class="C_Ontaphomnay_stat is-warning"><b><?php echo $so_tu_qua_han; ?></b><span>Từ đang quá hạn</span></div>
                 </div>
             </section>
@@ -117,7 +135,7 @@ $so_chu_de_qua_han = count(array_filter($dueTopics, static fn(array $topic): boo
                     <div class="C_Ontaphomnay_sectionHeading">
                         <div><span class="C_Ontaphomnay_kicker">Hàng đợi SRS</span>
                             <h2 id="dueTopicsTitle">Chọn chủ đề cần ôn</h2>
-                            <p>Chủ đề quá hạn được ưu tiên. Bấm vào một thẻ để xem biểu đồ riêng.</p>
+                            <p>Chủ đề quá hạn được ưu tiên. Từ cá nhân không thuộc chủ đề được gom vào nhóm ôn tập tổng hợp.</p>
                         </div>
                         <?php if ($so_chu_de_qua_han > 0): ?><span class="C_Ontaphomnay_priorityBadge"><?php echo $so_chu_de_qua_han; ?> chủ đề cần ưu tiên</span><?php endif; ?>
                     </div>
@@ -142,6 +160,15 @@ $so_chu_de_qua_han = count(array_filter($dueTopics, static fn(array $topic): boo
                                 <span class="C_Ontaphomnay_cardAction">Xem tiến độ <span aria-hidden="true">→</span></span>
                             </button>
                         <?php endforeach; ?>
+                        <?php if ($so_tu_khong_chu_de > 0): ?>
+                            <a href="C_Quiz.php?source=review&amp;mode=review&amp;scope=unassigned" class="C_Ontaphomnay_topicCard<?php echo $so_tu_khong_chu_de_qua_han > 0 ? ' is-overdue' : ''; ?>">
+                                <span class="C_Ontaphomnay_cardTopline"><span class="C_Ontaphomnay_topicNumber">+</span><span class="C_Ontaphomnay_dueStatus"><?php echo $so_tu_khong_chu_de_qua_han > 0 ? 'Có từ quá hạn' : 'Đến hạn hôm nay'; ?></span></span>
+                                <span class="C_Ontaphomnay_topicCategory">Bộ từ cá nhân</span>
+                                <strong class="C_Ontaphomnay_topicTitle">Ôn tập tổng hợp</strong>
+                                <span class="C_Ontaphomnay_topicSummary"><span><b><?php echo $so_tu_khong_chu_de; ?></b> từ cần ôn</span></span>
+                                <span class="C_Ontaphomnay_cardAction">Bắt đầu ôn <span aria-hidden="true">→</span></span>
+                            </a>
+                        <?php endif; ?>
                     </div>
 
                     <aside class="C_Ontaphomnay_levelGuide" aria-labelledby="levelGuideTitle">

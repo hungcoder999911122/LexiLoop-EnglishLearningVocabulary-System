@@ -1,14 +1,9 @@
 <?php
 header('Content-Type: application/json; charset=utf-8');
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-if (empty($_SESSION['user_id']) || ($_SESSION['auth_scope'] ?? '') !== 'user') {
-    http_response_code(401);
-    echo json_encode(['success' => false, 'message' => 'Quyền truy cập bị từ chối hoặc phiên đã hết hạn.']);
-    exit;
-}
+// Dùng cùng kiểm tra status với trang HTML, nhưng phản hồi JSON cho fetch/AJAX.
+$authGuardResponseType = 'json';
+require_once($_SERVER['DOCUMENT_ROOT'] . '/includes/auth_guard.php');
 
 require_once($_SERVER['DOCUMENT_ROOT'] . '/Connect.php');
 require_once($_SERVER['DOCUMENT_ROOT'] . '/includes/database_objects.php');

@@ -1,14 +1,9 @@
 <?php
 header('Content-Type: application/json; charset=utf-8');
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-if (!isset($_SESSION['user_id']) || ($_SESSION['auth_scope'] ?? '') !== 'user') {
-    http_response_code(401);
-    echo json_encode(['success' => false, 'message' => 'Quyền truy cập bị từ chối hoặc phiên đã hết hạn.']);
-    exit;
-}
+// Dùng cùng kiểm tra status với trang HTML, nhưng phản hồi JSON cho fetch/AJAX.
+$authGuardResponseType = 'json';
+require_once($_SERVER['DOCUMENT_ROOT'] . '/includes/auth_guard.php');
 
 require_once($_SERVER['DOCUMENT_ROOT'] . '/Connect.php');
 require_once($_SERVER['DOCUMENT_ROOT'] . '/includes/database_objects.php');
@@ -39,6 +34,9 @@ if (!in_array($source, ['topic', 'set', 'review'], true)
     || ($source !== 'review' && $sourceId <= 0)
     || !is_string($submissionToken)
     || !preg_match('/^[a-f0-9]{64}$/', $submissionToken)
+    // Checkpoint đã có learning_attempt.php xử lý. Endpoint này chỉ được
+    // phép chốt một phiên hoàn chỉnh để tránh ghi SRS rồi mới báo lỗi.
+    || !$isFinal
     || !$statuses) {
     http_response_code(422);
     echo json_encode(['success' => false, 'message' => 'Nguồn học hoặc tiến trình không hợp lệ.']);

@@ -12,9 +12,12 @@ $thanhCong = "";
 
 // Nhận diện thông báo từ đăng ký hoặc đổi mật khẩu
 if (isset($_GET['register']) && $_GET['register'] === 'success') {
-    $thanhCong = "Đăng ký tài khoản thành công! Vui lòng đăng nhập.";
+	$thanhCong = "Đăng ký tài khoản thành công! Vui lòng đăng nhập.";
 } elseif (isset($_GET['reset']) && $_GET['reset'] === 'success') {
-    $thanhCong = "Đặt lại mật khẩu thành công! Hãy đăng nhập với mật khẩu mới.";
+	$thanhCong = "Đặt lại mật khẩu thành công! Hãy đăng nhập với mật khẩu mới.";
+} elseif (isset($_GET['reason']) && $_GET['reason'] === 'account_inactive') {
+	// Guard chuyển về đây khi admin đã khóa tài khoản trong lúc user còn đăng nhập.
+	$loi = "Tài khoản đã bị khóa hoặc phiên đăng nhập không còn hợp lệ.";
 }
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') 

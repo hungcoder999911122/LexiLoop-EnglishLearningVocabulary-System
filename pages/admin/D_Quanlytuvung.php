@@ -111,7 +111,7 @@ if (strpos($category, 'topic_') === 0) {
     $scopeDescription = 'Chủ đề đã chọn không còn tồn tại.';
     foreach ($danhSachChuDe as $topic) {
         if ((int) $topic['topicID'] === (int) substr($category, 6)) {
-            $pageTitle = 'Từ vựng: ' . $topic['topicName'];
+            $pageTitle = 'Chủ đề: ' . $topic['topicName'];
             $scopeDescription = 'Chủ đề hệ thống · ' . $topic['word_count'] . ' từ trong chủ đề.';
             break;
         }
